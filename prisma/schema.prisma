@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Enums are removed for SQLite compatibility. We use String defaults.
+model User {
+  id       String  @id @default(cuid())
+  name     String
+  email    String  @unique
+  password String?
+  mobile   String? @unique
+  image    String?
+  role     String  @default("USER") // Using String since enums aren't natively supported in SQLite the same way, or we can use Prisma Enums (Prisma handles enum emulation in SQLite partially, actually SQLite doesn't support enums natively. Let's use String default).
+
+  mentorProfile Mentor?
+  adminReviews  AdminReview[]
+  auditLogs     AuditLog[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+}
+
+model Mentor {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Public Display
+  name            String
+  role            String?
+  company         String?
+  industry        String?
+  experienceYears Int?
+  rating          Float     @default(0.0)
+  reviewsCount    Int       @default(0)
+  price           Int       @default(0)
+  image           String?
+  companyTier     String    @default("Other")
+  location        String?
+  languages       String? // comma separated list
+  remoteAvailable Boolean   @default(true)
+  nextAvailable   DateTime?
+  totalSessions   Int       @default(0)
+
+  // Profile Completion & Verification
+  profileCompleted  Boolean @default(false)
+  completionScore   Int     @default(0) // 0 to 100
+  applicationStatus String  @default("DRAFT") // DRAFT, PENDING, VERIFIED, REJECTED, MORE_INFO_REQUIRED
+
+  // Step 1: Personal Info
+  gender   String?
+  dob      DateTime?
+  country  String?
+  state    String?
+  city     String?
+  timezone String?
+
+  // Step 2: Professional Info
+  employmentType String?
+  careerLevel    String?
+
+  // Step 4: About
+  bio        String?
+  highlights String?
+
+  settings        MentorSettings?
+  weeklySchedules WeeklySchedule[]
+  blockedDates    BlockedDate[]
+  bookings        Booking[]
+  calendarSync    CalendarIntegration?
+
+  skills         Skill[]
+  sessionTypes   SessionType[]
+  socialProfiles SocialProfile?
+  documents      VerificationDocument[]
+  adminReviews   AdminReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Skill {
+  id       String @id @default(cuid())
+  mentorId String
+  mentor   Mentor @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  name     String
+  category String // Technical, Non-Technical, Areas of Mentorship
+}
+
+model SessionType {
+  id       String @id @default(cuid())
+  mentorId String
+  mentor   Mentor @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  title    String // e.g., Resume Review
+  duration Int // minutes
+  price    Int // 0 if Free Discovery
+}
+
+model SocialProfile {
+  id        String  @id @default(cuid())
+  mentorId  String  @unique
+  mentor    Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  linkedin  String
+  portfolio String?
+  github    String?
+  twitter   String?
+  youtube   String?
+}
+
+model VerificationDocument {
+  id         String   @id @default(cuid())
+  mentorId   String
+  mentor     Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  type       String // EMPLOYEE_ID, GOVT_ID, RESUME
+  fileUrl    String
+  status     String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  uploadedAt DateTime @default(now())
+}
+
+model AdminReview {
+  id       String @id @default(cuid())
+  mentorId String
+  mentor   Mentor @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  adminId  String
+  admin    User   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  statusGiven String
+  reason      String?
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action     String
+  entityType String
+  entityId   String
+  details    String?
+  createdAt  DateTime @default(now())
+}
+
+// Existing Models retained to avoid breaking other functionality
+model MentorSettings {
+  id                   String   @id @default(cuid())
+  mentorId             String   @unique
+  mentor               Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  sessionDuration      Int      @default(60)
+  bufferTime           Int      @default(15)
+  maxSessionsPerDay    Int      @default(5)
+  advanceBookingWindow Int      @default(30)
+  noticePeriod         Int      @default(24)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model WeeklySchedule {
+  id          String  @id @default(cuid())
+  mentorId    String
+  mentor      Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  isAvailable Boolean @default(true)
+
+  @@unique([mentorId, dayOfWeek])
+}
+
+model BlockedDate {
+  id       String   @id @default(cuid())
+  mentorId String
+  mentor   Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  date     DateTime
+  reason   String?
+
+  @@unique([mentorId, date])
+}
+
+model Booking {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mentorId      String
+  mentor        Mentor         @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  date          DateTime
+  startTime     DateTime
+  endTime       DateTime
+  status        String         @default("PENDING")
+  price         Int
+  meetingLink   String?
+  payment       Payment?
+  notifications Notification[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  bookingId         String   @unique
+  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String?  @unique
+  razorpayPaymentId String?  @unique
+  amount            Int
+  status            String   @default("PENDING")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId    String?
+  mentorId  String?
+  type      String
+  message   String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+}
+
+model CalendarIntegration {
+  id           String   @id @default(cuid())
+  mentorId     String   @unique
+  mentor       Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  provider     String
+  accessToken  String
+  refreshToken String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
