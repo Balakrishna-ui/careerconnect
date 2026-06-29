@@ -201,7 +201,7 @@ export default function MentorsContent() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Select value={sortBy} onValueChange={setSortBy}>
+                  <Select value={sortBy} onValueChange={(val) => setSortBy(val as string)}>
                     <SelectTrigger className="w-44 h-9 rounded-lg text-sm" id="sort-mentors">
                       <SelectValue />
                     </SelectTrigger>

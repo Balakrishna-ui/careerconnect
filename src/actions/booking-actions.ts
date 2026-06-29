@@ -54,13 +54,13 @@ export async function getMentorBookingProfile(
   return {
     id: mentor.id,
     name: mentor.name,
-    role: mentor.role,
-    company: mentor.company,
+    role: mentor.role || "",
+    company: mentor.company || "",
     image: mentor.image,
     rating: mentor.rating,
     reviewsCount: mentor.reviewsCount,
     price: mentor.price,
-    verified: mentor.verified,
+    verified: mentor.applicationStatus === "VERIFIED",
     sessionDuration: mentor.settings?.sessionDuration ?? 60,
     bufferTime: mentor.settings?.bufferTime ?? 15,
   };

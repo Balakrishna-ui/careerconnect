@@ -32,14 +32,15 @@ export default async function MentorProfilePage({
 
   const mentor = await prisma.mentor.findUnique({
     where: { id },
-    include: { settings: true },
+    include: { settings: true, skills: true },
   });
 
   if (!mentor) notFound();
 
-  const skills = mentor.skills.split(", ").filter(Boolean);
-  const languages = mentor.languages.split(", ").filter(Boolean);
+  const skills = mentor.skills.map((s) => s.name);
+  const languages = mentor.languages ? mentor.languages.split(", ").filter(Boolean) : [];
   const sessionDuration = mentor.settings?.sessionDuration ?? 60;
+  const isVerified = mentor.applicationStatus === "VERIFIED";
 
   return (
     <div className="bg-muted/10 min-h-screen pb-24">
@@ -75,7 +76,7 @@ export default async function MentorProfilePage({
                       />
                       <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
                     </Avatar>
-                    {mentor.verified && (
+                    {isVerified && (
                       <div
                         className="absolute bottom-1 right-1 bg-background rounded-full p-0.5 shadow-sm"
                         title="Verified Employee"
