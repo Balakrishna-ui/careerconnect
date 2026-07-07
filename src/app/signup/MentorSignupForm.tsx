@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 
 export function MentorSignupForm() {
   const router = useRouter();
@@ -14,19 +15,55 @@ export function MentorSignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !email || !password) return;
     
-    // Redirect to the mentor application flow and prefill Step 1 using query parameters
-    const params = new URLSearchParams({
-      firstName,
-      lastName,
-      email,
-      password // Passing password via URL is generally unsafe, but we're mimicking the flow for the mock wizard.
-    });
-    router.push(`/mentor/apply?${params.toString()}`);
+    setIsLoading(true);
+    setError("");
+
+    try {
+      // 1. Create User and Mentor Profile
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          firstName, 
+          lastName, 
+          email, 
+          password,
+          role: "MENTOR"
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Something went wrong during registration");
+      }
+
+      // 2. Automatically sign in the newly created mentor
+      const signInResult = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (signInResult?.error) {
+        throw new Error("Failed to automatically sign in after registration");
+      }
+
+      // 3. Redirect to Onboarding / Dashboard
+      router.push("/mentor/apply");
+      router.refresh();
+      
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -99,9 +136,30 @@ export function MentorSignupForm() {
             </button>
           </div>
         </div>
-        <Button type="submit" className="w-full mt-4 h-12 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold shadow-lg shadow-blue-500/30 group transition-all duration-300 hover:-translate-y-0.5">
-          Apply as Mentor
-          <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 mt-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        <Button 
+          type="submit" 
+          disabled={isLoading}
+          className="w-full mt-4 h-12 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold shadow-lg shadow-blue-500/30 group transition-all duration-300 hover:-translate-y-0.5"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating account...
+            </>
+          ) : (
+            <>
+              Apply as Mentor
+              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+            </>
+          )}
         </Button>
       </div>
     </form>
