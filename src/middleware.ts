@@ -43,6 +43,7 @@ export default withAuth(
     return NextResponse.next();
   },
   {
+    secret: process.env.NEXTAUTH_SECRET || "super_secret_key_for_development",
     callbacks: {
       // Always return true so the middleware function can handle the redirects per-path
       authorized: () => true,
