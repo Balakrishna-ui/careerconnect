@@ -8,36 +8,44 @@ export default withAuth(
 
     // Admin routes
     if (path.startsWith("/admin") && path !== "/admin/login") {
-      if (token?.role !== "ADMIN") {
+      if (!token) {
+        return NextResponse.redirect(new URL("/admin/login", req.url));
+      }
+      if (token.role !== "ADMIN") {
         return NextResponse.redirect(new URL("/admin/login", req.url));
       }
     }
 
     // Mentor dashboard routes
-    // For now, assuming anyone with role "MENTOR" is an approved mentor. 
-    // Further granular checks (like applicationStatus = VERIFIED) could be done here or in the layout.
-    if (path.startsWith("/mentor/dashboard") && token?.role !== "MENTOR" && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/signup?view=login", req.url));
+    if (path.startsWith("/mentor/dashboard")) {
+      if (!token) return NextResponse.redirect(new URL("/signup?view=login", req.url));
+      if (token.role !== "MENTOR" && token.role !== "ADMIN") {
+        return NextResponse.redirect(new URL("/signup?view=login", req.url));
+      }
     }
 
     // Job Seeker dashboard routes
     if (path === "/dashboard" || path.startsWith("/dashboard/")) {
-      if (token?.role !== "JOB_SEEKER" && token?.role !== "ADMIN") {
+      if (!token) return NextResponse.redirect(new URL("/signup?view=login", req.url));
+      if (token.role !== "JOB_SEEKER" && token.role !== "ADMIN") {
         return NextResponse.redirect(new URL("/signup?view=login", req.url));
       }
     }
 
     // Booking routes (Premium required)
-    if (path.startsWith("/book") && !token?.premium) {
-      // Redirect to premium unlock page
-      return NextResponse.redirect(new URL("/premium", req.url));
+    if (path.startsWith("/book")) {
+      if (!token) return NextResponse.redirect(new URL("/signup?view=login", req.url));
+      if (!token.premium) {
+        return NextResponse.redirect(new URL("/premium", req.url));
+      }
     }
 
     return NextResponse.next();
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      // Always return true so the middleware function can handle the redirects per-path
+      authorized: () => true,
     },
   }
 );
