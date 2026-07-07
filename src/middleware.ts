@@ -7,12 +7,12 @@ export default withAuth(
     const path = req.nextUrl.pathname;
 
     // Admin routes
-    if (path.startsWith("/admin") && path !== "/admin/login") {
+    if (path.startsWith("/admin") && path !== "/admin-login") {
       if (!token) {
-        return NextResponse.redirect(new URL("/admin/login", req.url));
+        return NextResponse.redirect(new URL("/admin-login", req.url));
       }
       if (token.role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/admin/login", req.url));
+        return NextResponse.redirect(new URL("/admin-login", req.url));
       }
     }
 
