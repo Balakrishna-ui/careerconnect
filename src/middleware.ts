@@ -7,8 +7,10 @@ export default withAuth(
     const path = req.nextUrl.pathname;
 
     // Admin routes
-    if (path.startsWith("/admin") && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/signup", req.url));
+    if (path.startsWith("/admin") && path !== "/admin/login") {
+      if (token?.role !== "ADMIN") {
+        return NextResponse.redirect(new URL("/admin/login", req.url));
+      }
     }
 
     // Mentor dashboard routes
