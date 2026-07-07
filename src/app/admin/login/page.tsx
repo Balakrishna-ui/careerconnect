@@ -6,18 +6,19 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg("");
 
     try {
       const result = await signIn("credentials", {
@@ -28,14 +29,13 @@ export default function AdminLoginPage() {
       });
 
       if (result?.error) {
-        toast.error("Invalid admin credentials");
+        setErrorMsg("Invalid admin credentials");
       } else {
-        toast.success("Welcome back, Admin");
         router.push("/admin");
         router.refresh();
       }
     } catch (error) {
-      toast.error("An error occurred during login");
+      setErrorMsg("An error occurred during login");
     } finally {
       setLoading(false);
     }
@@ -60,6 +60,11 @@ export default function AdminLoginPage() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleLogin}>
+            {errorMsg && (
+              <div className="p-3 bg-red-100 text-red-700 text-sm rounded-md text-center">
+                {errorMsg}
+              </div>
+            )}
             <div>
               <Label htmlFor="email">Admin Email</Label>
               <div className="mt-1">
