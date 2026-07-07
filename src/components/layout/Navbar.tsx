@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { BriefcaseBusiness, Menu, LogOut, User } from "lucide-react"
+import { BriefcaseBusiness, Menu, LogOut, User, X } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "next-auth/react";
 import { JobSeekerAccountDrawer } from "@/components/layout/JobSeekerAccountDrawer";
@@ -20,6 +21,7 @@ import {
 export function Navbar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -145,12 +147,64 @@ export function Navbar() {
               </>
             )}
           </div>
-          <Button variant="outline" size="icon" className="md:hidden rounded-lg">
-            <Menu className="h-5 w-5" />
+          <Button 
+            variant="outline" 
+            size="icon" 
+            className="md:hidden rounded-lg"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          >
+            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             <span className="sr-only">Toggle Menu</span>
           </Button>
         </div>
       </div>
+      
+      {/* Mobile Menu Dropdown */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden border-t bg-background/95 backdrop-blur-xl">
+          <nav className="flex flex-col p-4 space-y-4">
+            <Link 
+              href="/mentors" 
+              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/mentors") && "bg-muted text-primary")}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Find Mentors
+            </Link>
+            <Link 
+              href="/companies" 
+              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/companies") && "bg-muted text-primary")}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Companies
+            </Link>
+            <Link 
+              href="/about" 
+              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname === "/about" && "bg-muted text-primary")}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              About Us
+            </Link>
+            {!session && (
+              <div className="flex flex-col gap-2 pt-2 border-t">
+                <Link 
+                  href="/signup?view=login"
+                  className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Log in
+                </Link>
+                <Link 
+                  href="/signup"
+                  className={cn(buttonVariants({ variant: "default" }), "w-full")}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
+          </nav>
+        </div>
+      )}
     </header>
   )
 }

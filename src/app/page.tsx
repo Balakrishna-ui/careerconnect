@@ -19,7 +19,7 @@ const FADE_UP_ANIMATION_VARIANTS: any = {
 
 export default function Home() {
   return (
-    <div className="flex flex-col bg-[#FAFBFF] overflow-hidden font-sans h-screen">
+    <div className="flex flex-col bg-[#FAFBFF] overflow-x-hidden font-sans min-h-screen">
       
       {/* Background Decor */}
       <div className="absolute top-0 inset-x-0 h-screen w-full overflow-hidden pointer-events-none z-0">
@@ -30,8 +30,8 @@ export default function Home() {
         <div className="absolute bottom-0 left-0 right-0 h-[20vh] bg-gradient-to-t from-blue-50/80 to-transparent transform -skew-y-[2deg] origin-bottom-left" />
       </div>
 
-      {/* Main Container - Exactly viewport height minus navbar (approx 64px) */}
-      <main className="container mx-auto px-4 lg:px-8 relative z-10 flex flex-col lg:flex-row items-center justify-between gap-4 h-[calc(100vh-64px)] w-full max-w-7xl">
+      {/* Main Container - Responsive min-height instead of fixed height for mobile overflow prevention */}
+      <main className="container mx-auto px-4 lg:px-8 relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-4 min-h-[calc(100vh-64px)] py-12 lg:py-0 w-full max-w-7xl">
         
         {/* Left Column - Copy & Actions */}
         <motion.div 

@@ -1,22 +1,32 @@
 "use client";
 
-import { Bell, Search, Moon, Sun, LogOut, User } from "lucide-react";
+import { Bell, Search, Moon, Sun, Menu } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
-import { Badge } from "@/components/ui/badge";
 
 interface AdminHeaderProps {
   title: string;
   subtitle?: string;
+  onMenuToggle?: () => void;
 }
 
-export function AdminHeader({ title, subtitle }: AdminHeaderProps) {
+export function AdminHeader({ title, subtitle, onMenuToggle }: AdminHeaderProps) {
   const { theme, setTheme } = useTheme();
 
   return (
-    <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 flex-shrink-0">
-      <div>
-        <h1 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h1>
-        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
+    <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+      <div className="flex items-center gap-3">
+        {onMenuToggle && (
+          <button 
+            onClick={onMenuToggle}
+            className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <div>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white truncate max-w-[150px] sm:max-w-xs">{title}</h1>
+          {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

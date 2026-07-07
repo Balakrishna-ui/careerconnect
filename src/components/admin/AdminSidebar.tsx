@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, ShieldCheck, CalendarDays, DollarSign,
   CreditCard, Star, AlertTriangle, Bell, Zap, Building2,
   LifeBuoy, BarChart3, Settings, ChevronLeft, ChevronRight,
-  GraduationCap, UserCheck, ChevronDown, ChevronUp,
+  GraduationCap, UserCheck, ChevronDown, ChevronUp, X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -43,10 +43,22 @@ const NAV_ITEMS = [
   { label: "Settings", href: "/admin/settings", icon: Settings, badge: null },
 ];
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  mobileMenuOpen?: boolean;
+  setMobileMenuOpen?: (open: boolean) => void;
+}
+
+export function AdminSidebar({ mobileMenuOpen, setMobileMenuOpen }: AdminSidebarProps = {}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<string[]>(["User Management"]);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    if (setMobileMenuOpen) {
+      setMobileMenuOpen(false);
+    }
+  }, [pathname, setMobileMenuOpen]);
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) =>
@@ -59,24 +71,42 @@ export function AdminSidebar() {
     children?.some((c) => pathname.startsWith(c.href));
 
   return (
-    <aside
-      className={cn(
-        "relative flex flex-col h-screen bg-gray-950 text-gray-300 border-r border-gray-800 transition-all duration-300 flex-shrink-0",
-        collapsed ? "w-16" : "w-64"
+    <>
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden" 
+          onClick={() => setMobileMenuOpen?.(false)}
+        />
       )}
-    >
-      {/* Logo */}
-      <div className={cn("flex items-center gap-3 px-4 h-16 border-b border-gray-800", collapsed && "justify-center px-2")}>
-        <div className="flex items-center justify-center w-8 h-8 bg-blue-600 rounded-lg flex-shrink-0">
-          <LayoutDashboard className="w-4 h-4 text-white" />
-        </div>
-        {!collapsed && (
-          <div>
-            <p className="text-white font-bold text-sm">CareerConnect</p>
-            <p className="text-gray-500 text-xs">Super Admin</p>
-          </div>
+      
+      <aside
+        className={cn(
+          "fixed md:relative flex flex-col h-screen bg-gray-950 text-gray-300 border-r border-gray-800 transition-all duration-300 flex-shrink-0 z-50",
+          collapsed ? "w-16" : "w-64",
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
-      </div>
+      >
+        {/* Logo */}
+        <div className={cn("flex items-center gap-3 px-4 h-16 border-b border-gray-800", collapsed && "justify-center px-2")}>
+          <div className="flex items-center justify-center w-8 h-8 bg-blue-600 rounded-lg flex-shrink-0">
+            <LayoutDashboard className="w-4 h-4 text-white" />
+          </div>
+          {!collapsed && (
+            <div className="flex-1 flex justify-between items-center">
+              <div>
+                <p className="text-white font-bold text-sm">CareerConnect</p>
+                <p className="text-gray-500 text-xs">Super Admin</p>
+              </div>
+              <button 
+                className="md:hidden text-gray-400 hover:text-white"
+                onClick={() => setMobileMenuOpen?.(false)}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+        </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 space-y-0.5 px-2">
@@ -152,7 +182,7 @@ export function AdminSidebar() {
       {/* Collapse Toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-20 w-6 h-6 bg-gray-800 border border-gray-700 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors z-10"
+        className="absolute -right-3 top-20 w-6 h-6 bg-gray-800 border border-gray-700 rounded-full hidden md:flex items-center justify-center hover:bg-gray-700 transition-colors z-10"
       >
         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
       </button>
@@ -172,5 +202,6 @@ export function AdminSidebar() {
         </div>
       )}
     </aside>
+    </>
   );
 }
