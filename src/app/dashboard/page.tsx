@@ -2,6 +2,10 @@ import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -12,14 +16,98 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Video, ArrowRight, Clock, Star } from "lucide-react";
+import { Calendar, Video, ArrowRight, Clock, Star, Download, IndianRupee, MapPin, CheckCircle2, History } from "lucide-react";
+import Image from "next/image";
+import { format } from "date-fns";
+import { LeaveReviewModal } from "@/components/dashboard/LeaveReviewModal";
 
-export default function JobSeekerDashboard() {
+export default async function JobSeekerDashboard() {
+  const session = await getServerSession(authOptions);
+  
+  // If we reach here, middleware ensures they are logged in
+  const user = session?.user;
+
+  if (user?.role === "MENTOR") {
+    redirect("/mentor/dashboard");
+  }
+
+  const firstName = user?.name?.split(" ")[0] || "User";
+
+  // Fetch all bookings for statistics and lists
+  const allBookings = await prisma.booking.findMany({
+    where: {
+      userId: user?.id,
+    },
+    include: {
+      mentor: true,
+      payment: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  const now = new Date();
+
+  // Statistics
+  const totalSessions = allBookings.length;
+  const completedBookings = allBookings.filter((b) => b.status === "COMPLETED" || new Date(b.endTime) < now);
+  const completedSessions = completedBookings.length;
+  const upcomingBookings = allBookings
+    .filter((b) => b.status === "CONFIRMED" && new Date(b.endTime) >= now)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  
+  const amountSpent = allBookings.reduce((acc, curr) => acc + (curr.payment?.amount || 0), 0);
+
+  // Past Bookings (Completed, Cancelled, Missed)
+  const pastBookings = allBookings.filter((b) => new Date(b.endTime) < now || b.status === "CANCELLED");
+
+  // Reviews
+  const userReviews = await prisma.review.findMany({
+    where: { userId: user?.id },
+  });
+  const reviewedBookingIds = new Set(userReviews.map((r) => r.bookingId));
+  const needsReviewBookings = completedBookings.filter((b) => !reviewedBookingIds.has(b.id));
+
+  // Saved Mentors
+  const savedMentors = await prisma.savedMentor.findMany({
+    where: { userId: user?.id },
+    include: { mentor: true },
+    take: 3,
+  });
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Welcome back, Alex</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome back, {firstName}</h1>
         <p className="text-muted-foreground">Manage your upcoming sessions and career progress.</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <Card className="shadow-sm border-border/50">
+          <CardContent className="p-6">
+            <p className="text-sm font-medium text-muted-foreground mb-1">Sessions Booked</p>
+            <h3 className="text-2xl font-bold">{totalSessions}</h3>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-border/50">
+          <CardContent className="p-6">
+            <p className="text-sm font-medium text-muted-foreground mb-1">Upcoming</p>
+            <h3 className="text-2xl font-bold">{upcomingBookings.length}</h3>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-border/50">
+          <CardContent className="p-6">
+            <p className="text-sm font-medium text-muted-foreground mb-1">Completed</p>
+            <h3 className="text-2xl font-bold">{completedSessions}</h3>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-border/50">
+          <CardContent className="p-6">
+            <p className="text-sm font-medium text-muted-foreground mb-1">Spent</p>
+            <h3 className="text-2xl font-bold">₹{(amountSpent / 100).toLocaleString('en-IN')}</h3>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -65,63 +153,163 @@ export default function JobSeekerDashboard() {
               </Link>
             </div>
             
-            <Card className="overflow-hidden shadow-sm border-border/50">
-              <div className="h-2 w-full bg-emerald-500" />
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex gap-4 items-center">
-                    <div className="bg-muted h-16 w-16 rounded-xl flex flex-col items-center justify-center border text-center">
-                      <span className="text-xs font-medium uppercase text-muted-foreground">Oct</span>
-                      <span className="text-xl font-bold leading-none">24</span>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg mb-1">Mock Interview & Resume Review</h3>
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5" /> 10:00 AM - 11:00 AM EST
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-                          SC
+            {upcomingBookings.length === 0 ? (
+              <Card className="overflow-hidden shadow-sm border-border/50 bg-muted/20">
+                <CardContent className="p-10 text-center flex flex-col items-center justify-center">
+                  <Calendar className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
+                  <p className="text-muted-foreground font-medium mb-4">No upcoming sessions scheduled.</p>
+                  <Link href="/mentors" className={cn(buttonVariants({ variant: "default" }))}>
+                    Find a Mentor
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+              upcomingBookings.slice(0, 3).map((booking) => {
+                const isLive = new Date() >= new Date(booking.startTime) && new Date() <= new Date(booking.endTime);
+                
+                return (
+                  <Card key={booking.id} className="overflow-hidden shadow-sm border-border/50 mb-4 transition-all hover:shadow-md">
+                    <div className={cn("h-1 w-full", isLive ? "bg-red-500" : "bg-primary")} />
+                    <CardContent className="p-0">
+                      <div className="flex flex-col sm:flex-row border-b border-border/30">
+                        {/* Left Info Area */}
+                        <div className="p-5 flex-1 flex gap-4">
+                          <div className="h-14 w-14 rounded-full overflow-hidden bg-muted flex-shrink-0 relative border">
+                            {booking.mentor?.image ? (
+                              <Image src={booking.mentor.image} alt={booking.mentor.name} fill className="object-cover" />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center font-bold text-muted-foreground bg-secondary/30">
+                                {booking.mentor?.name?.substring(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-bold text-lg leading-tight">{booking.mentor?.name}</h3>
+                              {isLive && <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold animate-pulse">Live Now</Badge>}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-2">{booking.mentor?.company ? `${booking.mentor.role} at ${booking.mentor.company}` : booking.mentor?.role}</p>
+                            
+                            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-muted-foreground">
+                              <span className="flex items-center text-foreground/80">
+                                <Calendar className="h-3.5 w-3.5 mr-1" />
+                                {format(new Date(booking.date), 'MMM d, yyyy')}
+                              </span>
+                              <span className="flex items-center text-foreground/80">
+                                <Clock className="h-3.5 w-3.5 mr-1" />
+                                {format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}
+                              </span>
+                              <span className="flex items-center text-foreground/80">
+                                <Video className="h-3.5 w-3.5 mr-1" />
+                                1:1 Mentorship Session
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-sm font-medium">with Sarah Chen (Google)</span>
+                        
+                        {/* Right Actions Area */}
+                        <div className="p-5 bg-muted/10 sm:border-l border-border/30 flex flex-col justify-center gap-2 sm:w-[200px]">
+                          {booking.meetingLink ? (
+                            <a 
+                              href={booking.meetingLink} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className={cn(buttonVariants({ variant: isLive ? "default" : "secondary" }), "w-full shadow-sm")}
+                            >
+                              <Video className="h-4 w-4 mr-2" /> Join Meeting
+                            </a>
+                          ) : (
+                            <Button className="w-full shadow-sm" variant="secondary" disabled>
+                              <Video className="h-4 w-4 mr-2" /> Link Pending
+                            </Button>
+                          )}
+                          <div className="grid grid-cols-2 gap-2">
+                            <Link href={`/dashboard/bookings/${booking.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-xs")}>
+                              View
+                            </Link>
+                            <Button variant="outline" size="sm" className="w-full text-xs text-muted-foreground">
+                              Reschedule
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="w-full sm:w-auto">
-                    <Link href="#" className={cn(buttonVariants(), "w-full sm:w-auto gap-2")}>
-                      <Video className="h-4 w-4" /> Join Call
-                    </Link>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </section>
 
           <section>
-            <h2 className="text-xl font-bold tracking-tight mb-4">Past Sessions</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold tracking-tight">Past Sessions</h2>
+              <Link href="/dashboard/bookings" className="text-sm text-primary hover:underline flex items-center">
+                View history <ArrowRight className="h-4 w-4 ml-1" />
+              </Link>
+            </div>
             <Card className="shadow-sm border-border/50 overflow-hidden">
               <Table>
-                <TableHeader className="bg-muted/30">
+                <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead>Mentor</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">Marcus Johnson</TableCell>
-                    <TableCell>Sep 12, 2023</TableCell>
-                    <TableCell>Career Guidance</TableCell>
-                    <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200">Completed</Badge></TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Elena Rodriguez</TableCell>
-                    <TableCell>Aug 05, 2023</TableCell>
-                    <TableCell>Portfolio Review</TableCell>
-                    <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200">Completed</Badge></TableCell>
-                  </TableRow>
+                  {pastBookings.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No past sessions found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    pastBookings.slice(0, 5).map((booking) => {
+                      const amount = booking.payment?.amount ? booking.payment.amount / 100 : 0;
+                      const isCompleted = booking.status === "COMPLETED" || new Date(booking.endTime) < now;
+                      const displayStatus = isCompleted ? "Completed" : booking.status === "CANCELLED" ? "Cancelled" : "Missed";
+                      
+                      return (
+                        <TableRow key={booking.id} className="hover:bg-muted/30">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-full bg-secondary/30 flex items-center justify-center text-xs font-bold border overflow-hidden">
+                                {booking.mentor?.image ? (
+                                  <Image src={booking.mentor.image} alt="" width={32} height={32} className="object-cover" />
+                                ) : (
+                                  booking.mentor?.name?.substring(0, 2).toUpperCase()
+                                )}
+                              </div>
+                              {booking.mentor?.name || "Mentor"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm font-medium">{format(new Date(booking.date), 'MMM d, yyyy')}</div>
+                            <div className="text-xs text-muted-foreground">{format(new Date(booking.startTime), 'h:mm a')}</div>
+                          </TableCell>
+                          <TableCell>₹{amount}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn(
+                              displayStatus === "Completed" && "bg-emerald-50 text-emerald-600 border-emerald-200",
+                              displayStatus === "Cancelled" && "bg-red-50 text-red-600 border-red-200",
+                              displayStatus === "Missed" && "bg-amber-50 text-amber-600 border-amber-200",
+                            )}>
+                              {displayStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Link href={`/dashboard/bookings/${booking.id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                                Details
+                              </Link>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </Card>
@@ -129,25 +317,64 @@ export default function JobSeekerDashboard() {
         </div>
 
         <div className="space-y-6">
+          {needsReviewBookings.length > 0 && (
+            <Card className="shadow-sm border-amber-200 bg-amber-50/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-amber-800 flex items-center gap-2">
+                  <Star className="h-4 w-4 fill-amber-500 text-amber-500" /> Needs Review
+                </CardTitle>
+                <CardDescription className="text-amber-700/80">Leave feedback for your past mentors.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {needsReviewBookings.slice(0, 3).map((booking) => (
+                  <div key={booking.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full overflow-hidden bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-xs">
+                        {booking.mentor?.image ? (
+                          <Image src={booking.mentor.image} alt="" width={36} height={36} className="object-cover" />
+                        ) : (
+                          booking.mentor?.name?.substring(0, 2).toUpperCase()
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">{booking.mentor?.name}</p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(booking.date), 'MMM d')} Session</p>
+                      </div>
+                    </div>
+                    <LeaveReviewModal 
+                      bookingId={booking.id} 
+                      mentorId={booking.mentorId} 
+                      mentorName={booking.mentor?.name || "Mentor"} 
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="shadow-sm border-border/50">
-            <CardHeader>
-              <CardTitle>Needs Review</CardTitle>
-              <CardDescription>Leave feedback for your past mentors.</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle>Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-secondary/20 flex items-center justify-center text-secondary font-bold text-sm">
-                    MJ
+              <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+                {allBookings.slice(0, 4).map((booking, idx) => (
+                  <div key={booking.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-100 text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                      <History className="h-4 w-4" />
+                    </div>
+                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-3 rounded border border-slate-200 shadow-sm">
+                      <div className="flex items-center justify-between space-x-2 mb-1">
+                        <div className="font-bold text-slate-900 text-sm">Session Booked</div>
+                        <time className="font-medium text-xs text-slate-500">{format(new Date(booking.createdAt), 'MMM d')}</time>
+                      </div>
+                      <div className="text-slate-500 text-xs">with {booking.mentor?.name}</div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold">Marcus Johnson</p>
-                    <p className="text-xs text-muted-foreground">Sep 12 Session</p>
-                  </div>
-                </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                  <Star className="h-4 w-4" />
-                </Button>
+                ))}
+                {allBookings.length === 0 && (
+                  <div className="text-center text-sm text-muted-foreground py-4 relative z-10 bg-background">No recent activity</div>
+                )}
               </div>
             </CardContent>
           </Card>

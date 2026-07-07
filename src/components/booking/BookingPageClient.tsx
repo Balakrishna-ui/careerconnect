@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,6 +19,7 @@ import {
   PartyPopper,
   Copy,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,15 +31,17 @@ import {
   getAvailableSlots,
   createBooking,
   confirmBooking,
-  getTestUser,
   type MentorBookingProfile,
   type AvailableDate,
   type TimeSlot,
 } from "@/actions/booking-actions";
+import { useSession } from "next-auth/react";
+import LoginRequiredModal from "@/components/auth/LoginRequiredModal";
 
 // ─── Step indicator ──────────────────────────────────────────────────────────
 
 const STEPS = [
+  { label: "Select Service", icon: Star },
   { label: "Select Date", icon: Calendar },
   { label: "Select Time", icon: Clock },
   { label: "Payment", icon: CreditCard },
@@ -345,8 +349,12 @@ export default function BookingPageClient({
   mentorId: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialServiceId = searchParams?.get("service") || null;
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(initialServiceId);
+
   const [isPending, startTransition] = useTransition();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialServiceId ? 1 : 0);
 
   // Data
   const [mentor, setMentor] = useState<MentorBookingProfile | null>(null);
@@ -360,6 +368,8 @@ export default function BookingPageClient({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
+  const selectedService = mentor?.services?.find(s => s.id === selectedServiceId);
+
   // Booking result
   const [bookingResult, setBookingResult] = useState<{
     bookingId: string;
@@ -369,42 +379,57 @@ export default function BookingPageClient({
   } | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const { data: session, status } = useSession();
   const [copied, setCopied] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   // ── Load mentor profile ──
   useEffect(() => {
     startTransition(async () => {
-      const [profile, user] = await Promise.all([
-        getMentorBookingProfile(mentorId),
-        getTestUser(),
-      ]);
+      const profile = await getMentorBookingProfile(mentorId);
       setMentor(profile);
-      if (user) setUserId(user.id);
     });
   }, [mentorId]);
 
-  // ── Load available dates when month changes ──
   useEffect(() => {
-    if (!mentorId) return;
+    if (session?.user?.id) {
+      setUserId(session.user.id);
+    }
+  }, [session?.user?.id]);
+
+  // ── Load available dates when month changes ──
+  const fetchAvailableDates = useCallback(() => {
+    if (!mentorId || !selectedService) return;
+    setHasError(false);
     startTransition(async () => {
-      const dates = await getAvailableDates(mentorId, calYear, calMonth);
-      setAvailableDates(dates);
+      try {
+        const dates = await getAvailableDates(mentorId, calYear, calMonth, selectedService.duration);
+        setAvailableDates(dates);
+      } catch (err) {
+        setHasError(true);
+      }
     });
-  }, [mentorId, calYear, calMonth]);
+  }, [mentorId, selectedService, calYear, calMonth]);
+
+  useEffect(() => {
+    fetchAvailableDates();
+  }, [fetchAvailableDates]);
 
   // ── Load slots when date changes ──
   useEffect(() => {
-    if (!selectedDate) return;
+    if (!selectedDate || !selectedService) return;
     startTransition(async () => {
-      const s = await getAvailableSlots(mentorId, selectedDate);
+      const s = await getAvailableSlots(mentorId, selectedDate, selectedService.duration);
       setSlots(s);
     });
-  }, [mentorId, selectedDate]);
+  }, [mentorId, selectedDate, selectedService]);
 
   const handleDateSelect = useCallback((d: string) => {
     setSelectedDate(d);
     setSelectedSlot(null);
-    setStep(1);
+    setStep(2);
   }, []);
 
   const handleSlotSelect = useCallback((s: string) => {
@@ -427,20 +452,25 @@ export default function BookingPageClient({
 
   const handleProceedToPayment = () => {
     if (selectedDate && selectedSlot) {
-      setStep(2);
+      if (status === "unauthenticated") {
+        setShowLoginModal(true);
+      } else {
+        setStep(3);
+      }
     }
   };
 
   const handleConfirmPayment = async () => {
-    if (!selectedDate || !selectedSlot || !userId || !mentor) return;
+    if (!selectedDate || !selectedSlot || !userId || !mentor || !selectedServiceId) return;
 
     setIsProcessing(true);
 
     try {
-      // Step 1: Create booking
+      // Step 1: Create booking and Razorpay order
       const result = await createBooking({
-        mentorId: mentor.id,
+        mentorId,
         userId,
+        serviceId: selectedServiceId,
         dateStr: selectedDate,
         startTime: selectedSlot,
       });
@@ -451,28 +481,83 @@ export default function BookingPageClient({
         return;
       }
 
-      // Step 2: Simulate Razorpay payment (mock)
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Step 3: Confirm booking
-      const confirmation = await confirmBooking({
-        bookingId: result.bookingId!,
-        razorpayPaymentId: `pay_${Date.now()}`,
+      // Step 2: Load Razorpay
+      const res = await new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
       });
 
-      if (confirmation.success) {
-        setBookingResult({
-          bookingId: result.bookingId!,
-          meetingLink: confirmation.meetingLink!,
-          date: selectedDate,
-          time: selectedSlot,
-        });
-        setStep(3);
+      if (!res) {
+        alert("Razorpay SDK failed to load. Are you online?");
+        setIsProcessing(false);
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      alert("Payment failed. Please try again.");
-    } finally {
+
+      // Step 3: Initialize Razorpay Checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "test_key",
+        amount: result.amount! * 100,
+        currency: "INR",
+        name: "CareerConnect",
+        description: `Session Booking with ${mentor.name}`,
+        order_id: result.razorpayOrderId,
+        handler: async function (response: any) {
+          try {
+            // Verify Payment
+            const verifyRes = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                type: "BOOKING",
+                metadata: { bookingId: result.bookingId }
+              }),
+            });
+            
+            if (verifyRes.ok) {
+              setBookingResult({
+                bookingId: result.bookingId!,
+                meetingLink: "Pending Mentor Approval",
+                date: selectedDate,
+                time: selectedSlot,
+              });
+              setStep(4);
+            } else {
+              const verifyData = await verifyRes.json();
+              alert("Payment verification failed: " + verifyData.error);
+            }
+          } catch (error) {
+            console.error("Verification error:", error);
+            alert("Payment verification failed");
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          name: session?.user?.name || "",
+          email: session?.user?.email || "",
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+      };
+
+      const paymentObject = new (window as any).Razorpay(options);
+      paymentObject.open();
+
+    } catch (error) {
+      console.error("Booking error:", error);
+      alert("Something went wrong while booking the session.");
       setIsProcessing(false);
     }
   };
@@ -518,15 +603,72 @@ export default function BookingPageClient({
           <div className="flex-1 min-w-0">
             <Card className="border-none shadow-lg rounded-2xl overflow-hidden">
               <CardContent className="p-6 sm:p-8">
-                {/* Step 0: Calendar */}
+                {/* Step 0: Service Selection */}
                 {step === 0 && (
                   <div>
-                    <h2 className="text-xl font-bold mb-1">Pick a Date</h2>
+                    <h2 className="text-xl font-bold mb-1">Select a Service</h2>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Choose the type of session you'd like to book
+                    </p>
+                    
+                    <div className="space-y-4">
+                      {mentor.services.map(service => (
+                        <div 
+                          key={service.id}
+                          onClick={() => {
+                            setSelectedServiceId(service.id);
+                            setStep(1);
+                          }}
+                          className={cn(
+                            "p-5 rounded-2xl border cursor-pointer transition-all hover:border-primary hover:shadow-md",
+                            selectedServiceId === service.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+                          )}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-lg">{service.title}</h3>
+                            <span className="text-xl font-extrabold text-primary">₹{service.price.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center text-sm text-muted-foreground gap-3">
+                            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4"/> {service.duration} min session</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1.5"><Video className="w-4 h-4"/> 1:1 Video Call</span>
+                          </div>
+                        </div>
+                      ))}
+                      {mentor.services.length === 0 && (
+                        <div className="text-center p-8 bg-muted/30 rounded-2xl border border-dashed">
+                          <p className="text-muted-foreground">No services configured yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 1: Calendar */}
+                {step === 1 && selectedService && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <h2 className="text-xl font-bold mb-1">Pick a Date</h2>
+                      <Button variant="ghost" size="sm" onClick={() => { setStep(0); setSelectedServiceId(null); setSelectedDate(null); setSelectedSlot(null); }} className="text-xs">
+                        <ChevronLeft className="w-3 h-3 mr-1" /> Change Service
+                      </Button>
+                    </div>
                     <p className="text-sm text-muted-foreground mb-6">
                       Green dates have available time slots
                     </p>
 
-                    {isPending && availableDates.length === 0 ? (
+                    {hasError ? (
+                      <div className="text-center py-16 bg-red-50 dark:bg-red-950/20 rounded-3xl border border-red-200 dark:border-red-900/50">
+                        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-red-700 dark:text-red-400 mb-1">Unable to load mentor availability.</h3>
+                        <p className="text-red-600/80 dark:text-red-400/80 text-sm mb-6">
+                          Please try again later.
+                        </p>
+                        <Button onClick={() => fetchAvailableDates()} variant="outline" className="border-red-200 text-red-600 hover:bg-red-100">
+                          Retry
+                        </Button>
+                      </div>
+                    ) : isPending && availableDates.length === 0 ? (
                       <div className="flex justify-center py-16">
                         <Loader2 className="w-6 h-6 animate-spin text-primary" />
                       </div>
@@ -543,8 +685,8 @@ export default function BookingPageClient({
                   </div>
                 )}
 
-                {/* Step 1: Time Slots */}
-                {step === 1 && selectedDate && (
+                {/* Step 2: Time Slots */}
+                {step === 2 && selectedDate && selectedService && (
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <h2 className="text-xl font-bold">Pick a Time</h2>
@@ -552,7 +694,7 @@ export default function BookingPageClient({
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setStep(0);
+                          setStep(1);
                           setSelectedSlot(null);
                         }}
                         className="text-xs"
@@ -561,7 +703,7 @@ export default function BookingPageClient({
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground mb-6">
-                      {mentor.sessionDuration} min sessions with{" "}
+                      {selectedService.duration} min sessions with{" "}
                       {mentor.bufferTime} min buffer
                     </p>
 
@@ -595,8 +737,8 @@ export default function BookingPageClient({
                   </div>
                 )}
 
-                {/* Step 2: Payment Confirmation */}
-                {step === 2 && selectedDate && selectedSlot && (
+                {/* Step 3: Payment Confirmation */}
+                {step === 3 && selectedDate && selectedSlot && selectedService && (
                   <div>
                     <h2 className="text-xl font-bold mb-1">
                       Confirm & Pay
@@ -643,7 +785,7 @@ export default function BookingPageClient({
                           Duration
                         </span>
                         <span className="font-semibold">
-                          {mentor.sessionDuration} Minutes
+                          {selectedService.duration} Minutes
                         </span>
                       </div>
                       <div className="border-t border-border/40" />
@@ -652,8 +794,7 @@ export default function BookingPageClient({
                           Session Type
                         </span>
                         <div className="flex items-center gap-1.5 font-semibold">
-                          <Video className="w-4 h-4 text-primary" /> 1:1 Video
-                          Call
+                          <Video className="w-4 h-4 text-primary" /> {selectedService.title}
                         </div>
                       </div>
                       <div className="border-t border-border" />
@@ -662,7 +803,7 @@ export default function BookingPageClient({
                           Total Amount
                         </span>
                         <span className="text-2xl font-extrabold text-primary">
-                          ₹{mentor.price.toLocaleString()}
+                          ₹{selectedService.price.toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -682,14 +823,14 @@ export default function BookingPageClient({
                         ) : (
                           <>
                             <CreditCard className="w-5 h-5 mr-2" />
-                            Pay ₹{mentor.price.toLocaleString()} via Razorpay
+                            Pay ₹{selectedService.price.toLocaleString()} via Razorpay
                           </>
                         )}
                       </Button>
                       <Button
                         variant="ghost"
                         className="w-full"
-                        onClick={() => setStep(1)}
+                        onClick={() => setStep(2)}
                         disabled={isProcessing}
                       >
                         <ChevronLeft className="w-4 h-4 mr-1" /> Go Back
@@ -703,8 +844,8 @@ export default function BookingPageClient({
                   </div>
                 )}
 
-                {/* Step 3: Success */}
-                {step === 3 && bookingResult && (
+                {/* Step 4: Success */}
+                {step === 4 && bookingResult && (
                   <div className="text-center py-4">
                     <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
                       <PartyPopper className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
@@ -756,7 +897,7 @@ export default function BookingPageClient({
                           Duration
                         </span>
                         <span className="font-semibold">
-                          {mentor.sessionDuration} Minutes
+                          {selectedService?.duration || 0} Minutes
                         </span>
                       </div>
                       <div className="border-t border-border/40" />
@@ -765,7 +906,7 @@ export default function BookingPageClient({
                           Amount Paid
                         </span>
                         <span className="font-bold text-emerald-600">
-                          ₹{mentor.price.toLocaleString()}
+                          ₹{(selectedService?.price || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -889,7 +1030,7 @@ export default function BookingPageClient({
                           Duration
                         </span>
                         <span className="text-sm font-semibold">
-                          {mentor.sessionDuration} min
+                          {selectedService?.duration || 0} min
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -897,7 +1038,7 @@ export default function BookingPageClient({
                           Price
                         </span>
                         <span className="text-lg font-extrabold text-primary">
-                          ₹{mentor.price.toLocaleString()}
+                          ₹{(selectedService?.price || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -939,6 +1080,11 @@ export default function BookingPageClient({
           )}
         </div>
       </div>
+      <LoginRequiredModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)}
+        callbackUrl={`/mentors/${mentorId}/book`}
+      />
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import BookingPageClient from "@/components/booking/BookingPageClient";
+import { Suspense } from "react";
+import { Loader2 } from "lucide-react";
 
 export default async function BookSessionPage({
   params,
@@ -7,5 +9,9 @@ export default async function BookSessionPage({
 }) {
   const { id } = await params;
 
-  return <BookingPageClient mentorId={id} />;
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+      <BookingPageClient mentorId={id} />
+    </Suspense>
+  );
 }

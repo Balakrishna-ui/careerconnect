@@ -14,7 +14,7 @@ import {
 
 const DEFAULT_FILTERS: FilterState = {
   experience: [], companies: [], roles: [], skills: [], industries: [],
-  goals: [], priceRange: [500, 5000], minRating: "",
+  goals: [], priceRange: [0, 5000], minRating: "",
   companyTiers: [], languages: [], locations: [],
   remoteAvailable: false, verified: false,
 };

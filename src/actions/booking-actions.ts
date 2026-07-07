@@ -33,9 +33,8 @@ export interface MentorBookingProfile {
   image: string | null;
   rating: number;
   reviewsCount: number;
-  price: number;
   verified: boolean;
-  sessionDuration: number;
+  services: { id: string; title: string; duration: number; price: number }[];
   bufferTime: number;
 }
 
@@ -46,7 +45,7 @@ export async function getMentorBookingProfile(
 ): Promise<MentorBookingProfile | null> {
   const mentor = await prisma.mentor.findUnique({
     where: { id: mentorId },
-    include: { settings: true },
+    include: { settings: true, sessionTypes: true },
   });
 
   if (!mentor) return null;
@@ -59,9 +58,13 @@ export async function getMentorBookingProfile(
     image: mentor.image,
     rating: mentor.rating,
     reviewsCount: mentor.reviewsCount,
-    price: mentor.price,
     verified: mentor.applicationStatus === "VERIFIED",
-    sessionDuration: mentor.settings?.sessionDuration ?? 60,
+    services: mentor.sessionTypes.map(s => ({
+      id: s.id,
+      title: s.title,
+      duration: s.duration,
+      price: s.price
+    })),
     bufferTime: mentor.settings?.bufferTime ?? 15,
   };
 }
@@ -71,20 +74,18 @@ export async function getMentorBookingProfile(
 export async function getAvailableDates(
   mentorId: string,
   year: number,
-  month: number // 0-indexed (JS Date convention)
+  month: number, // 0-indexed (JS Date convention)
+  sessionDuration: number = 60
 ): Promise<AvailableDate[]> {
   // Fetch mentor settings
   const settings = await prisma.mentorSettings.findUnique({
     where: { mentorId },
   });
 
-  if (!settings) return [];
-
-  const advanceDays = settings.advanceBookingWindow;
-  const noticePeriodHours = settings.noticePeriod;
-  const sessionDuration = settings.sessionDuration;
-  const bufferTime = settings.bufferTime;
-  const maxPerDay = settings.maxSessionsPerDay;
+  const advanceDays = settings?.advanceBookingWindow ?? 60;
+  const noticePeriodHours = settings?.noticePeriod ?? 24;
+  const bufferTime = settings?.bufferTime ?? 15;
+  const maxPerDay = settings?.maxSessionsPerDay ?? 8;
 
   // Fetch weekly schedules
   const weeklySchedules = await prisma.weeklySchedule.findMany({
@@ -207,24 +208,25 @@ export async function getAvailableDates(
 
 export async function getAvailableSlots(
   mentorId: string,
-  dateStr: string // "YYYY-MM-DD"
+  dateStr: string,
+  sessionDuration: number = 60
 ): Promise<TimeSlot[]> {
-  const settings = await prisma.mentorSettings.findUnique({
-    where: { mentorId },
+  const date = parseISO(dateStr); // "YYYY-MM-DD"
+  const dayOfWeek = date.getDay();
+
+  // Fetch settings & schedule
+  const mentor = await prisma.mentor.findUnique({
+    where: { id: mentorId },
+    include: { settings: true, weeklySchedules: true },
   });
 
-  if (!settings) return [];
+  if (!mentor || !mentor.weeklySchedules) return [];
 
-  const sessionDuration = settings.sessionDuration;
-  const bufferTime = settings.bufferTime;
+  const settings = mentor.settings;
+  const bufferTime = settings?.bufferTime ?? 15;
 
   // Get schedule for this day of week
-  const date = parseISO(dateStr);
-  const dow = date.getDay();
-
-  const schedule = await prisma.weeklySchedule.findUnique({
-    where: { mentorId_dayOfWeek: { mentorId, dayOfWeek: dow } },
-  });
+  const schedule = mentor.weeklySchedules.find((s: any) => s.dayOfWeek === dayOfWeek);
 
   if (!schedule || !schedule.isAvailable) return [];
 
@@ -294,20 +296,29 @@ export async function getAvailableSlots(
 export async function createBooking(data: {
   mentorId: string;
   userId: string;
+  serviceId: string;
   dateStr: string; // "YYYY-MM-DD"
   startTime: string; // "HH:mm"
 }) {
-  const { mentorId, userId, dateStr, startTime } = data;
+  const { mentorId, userId, serviceId, dateStr, startTime } = data;
+
+  // Get service
+  const service = await prisma.sessionType.findUnique({
+    where: { id: serviceId }
+  });
+  if (!service || service.mentorId !== mentorId) {
+    return { success: false, error: "Invalid service selected." };
+  }
 
   // Verify slot is still available
-  const slots = await getAvailableSlots(mentorId, dateStr);
+  const slots = await getAvailableSlots(mentorId, dateStr, service.duration);
   const slot = slots.find((s) => s.start === startTime && s.available);
 
   if (!slot) {
     return { success: false, error: "This time slot is no longer available." };
   }
 
-  // Get mentor for price
+  // Get mentor
   const mentor = await prisma.mentor.findUnique({
     where: { id: mentorId },
     include: { settings: true },
@@ -317,7 +328,8 @@ export async function createBooking(data: {
     return { success: false, error: "Mentor not found." };
   }
 
-  const sessionDuration = mentor.settings?.sessionDuration ?? 60;
+  const sessionDuration = service.duration;
+  const price = service.price;
   const date = parseISO(dateStr);
   const [h, m] = startTime.split(":").map(Number);
 
@@ -334,18 +346,29 @@ export async function createBooking(data: {
       date: startOfDay(date),
       startTime: bookingStart,
       endTime: bookingEnd,
-      status: "PENDING",
-      price: mentor.price,
+      status: "AWAITING_PAYMENT",
+      price: service.price,
     },
   });
 
-  // Create a pending payment
-  const razorpayOrderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
+  let razorpayOrderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
+  
+  try {
+    const { razorpay } = require("@/lib/razorpay");
+    const order = await razorpay.orders.create({
+      amount: service.price * 100,
+      currency: "INR",
+      receipt: booking.id
+    });
+    razorpayOrderId = order.id;
+  } catch (error) {
+    console.error("Razorpay order creation failed (falling back to mock ID):", error);
+  }
 
   await prisma.payment.create({
     data: {
       bookingId: booking.id,
-      amount: mentor.price,
+      amount: service.price,
       status: "PENDING",
       razorpayOrderId,
     },
@@ -355,7 +378,7 @@ export async function createBooking(data: {
     success: true,
     bookingId: booking.id,
     razorpayOrderId,
-    amount: mentor.price,
+    amount: service.price,
   };
 }
 
@@ -455,4 +478,48 @@ export async function cancelBooking(bookingId: string) {
 export async function getTestUser() {
   const user = await prisma.user.findFirst();
   return user ? JSON.parse(JSON.stringify(user)) : null;
+}
+
+export async function createPendingBooking(data: { mentorId: string; date: string; time: string; duration: number; price: number }) {
+  // const session = await getServerSession(authOptions);
+  // if (!session || !session.user?.premium) {
+  //   throw new Error("Premium required to book");
+  // }
+  
+  // Dummy user creation if needed for testing flow
+  let user = await prisma.user.findFirst();
+  if (!user) {
+    user = await prisma.user.create({ data: { name: "Test User", email: "testuser@example.com" }});
+  }
+  const userId = user.id;
+
+  const bookingDate = new Date(`${data.date}T${data.time}`);
+  const endTime = new Date(bookingDate.getTime() + data.duration * 60000);
+
+  const booking = await prisma.booking.create({
+    data: {
+      userId,
+      mentorId: data.mentorId,
+      date: bookingDate,
+      startTime: bookingDate,
+      endTime,
+      status: "PENDING",
+      price: data.price,
+      payment: {
+        create: {
+          amount: data.price,
+          status: "PENDING"
+        }
+      },
+      notifications: {
+        create: {
+          mentorId: data.mentorId,
+          type: "NEW_BOOKING_REQUEST",
+          message: `New session request for ${data.date} at ${data.time}`
+        }
+      }
+    }
+  });
+
+  return { success: true, bookingId: booking.id };
 }

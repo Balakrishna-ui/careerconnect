@@ -115,7 +115,7 @@ export default function Home() {
             </Link>
 
             <Link 
-              href="/signup" 
+              href="/signup?type=mentor" 
               className="group flex items-center justify-between sm:justify-start gap-3 bg-white hover:bg-gray-50 text-gray-900 rounded-[1.2rem] p-2.5 xl:p-3 pr-4 xl:pr-5 transition-all duration-300 shadow-lg shadow-gray-200/50 hover:shadow-xl hover:shadow-gray-200/70 border border-gray-100 hover:-translate-y-1 w-full sm:w-auto"
             >
               <div className="bg-gray-100 p-2 xl:p-2.5 rounded-xl">
@@ -173,7 +173,7 @@ export default function Home() {
               </div>
 
               {/* Bottom White Card */}
-              <div className="absolute top-[45%] left-[40%] w-[260px] lg:w-[300px] aspect-square bg-white rounded-[2rem] p-6 text-gray-900 shadow-2xl shadow-gray-300/50 z-30 flex flex-col justify-center border border-gray-50">
+              <Link href="/signup?type=mentor" className="absolute top-[45%] left-[40%] w-[260px] lg:w-[300px] aspect-square bg-white rounded-[2rem] p-6 text-gray-900 shadow-2xl shadow-gray-300/50 z-30 flex flex-col justify-center border border-gray-50 hover:scale-105 hover:shadow-gray-300/70 transition-all duration-300 cursor-pointer">
                 <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mb-5">
                   <BriefcaseBusiness className="w-6 h-6 text-gray-700" />
                 </div>
@@ -181,10 +181,10 @@ export default function Home() {
                 <p className="text-gray-500 text-sm leading-relaxed mb-6">
                   Share your expertise, help aspiring professionals accelerate their careers, and get paid.
                 </p>
-                <div className="flex items-center text-sm font-bold text-gray-900 group cursor-pointer w-fit">
+                <div className="flex items-center text-sm font-bold text-gray-900 group w-fit">
                   Get Started <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
                 </div>
-              </div>
+              </Link>
 
               {/* Floating Badges */}
               <div className="absolute top-[5%] left-[65%] bg-white rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 flex items-center gap-2 z-40">

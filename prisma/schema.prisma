@@ -17,14 +17,34 @@ model User {
   mobile   String? @unique
   image    String?
   role     String  @default("USER") // Using String since enums aren't natively supported in SQLite the same way, or we can use Prisma Enums (Prisma handles enum emulation in SQLite partially, actually SQLite doesn't support enums natively. Let's use String default).
+  premium  Boolean @default(false)
 
   mentorProfile Mentor?
   adminReviews  AdminReview[]
   auditLogs     AuditLog[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  bookings  Booking[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastLoginAt   DateTime?
+  bookings      Booking[]
+  subscriptions Subscription[]
+
+  emailVerified DateTime?
+  accounts      Account[]
+  sessions      Session[]
+  savedMentors  SavedMentor[]
+  reviews       Review[]
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      String   @default("PREMIUM")
+  price     Int      @default(99)
+  active    Boolean  @default(true)
+  startDate DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Mentor {
@@ -63,8 +83,12 @@ model Mentor {
   timezone String?
 
   // Step 2: Professional Info
-  employmentType String?
-  careerLevel    String?
+  employmentType    String?
+  careerLevel       String?
+  currentCTC        String?
+  noticePeriod      String?
+  headline          String?
+  profileVisibility String  @default("PRIVATE") // PUBLIC, PRIVATE
 
   // Step 4: About
   bio        String?
@@ -81,6 +105,12 @@ model Mentor {
   socialProfiles SocialProfile?
   documents      VerificationDocument[]
   adminReviews   AdminReview[]
+
+  savedMentors SavedMentor[]
+  reviews      Review[]
+
+  experiences Experience[]
+  educations  Education[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -234,4 +264,93 @@ model CalendarIntegration {
   refreshToken String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model CompanyEmailOTP {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Experience {
+  id               String  @id @default(cuid())
+  mentorId         String
+  mentor           Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  companyName      String
+  designation      String
+  duration         String
+  domain           String?
+  responsibilities String?
+}
+
+model Education {
+  id          String  @id @default(cuid())
+  mentorId    String
+  mentor      Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  college     String
+  degree      String
+  passingYear String
+  cgpa        String?
+}
+
+// NextAuth Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model SavedMentor {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mentorId  String
+  mentor    Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, mentorId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mentorId  String
+  mentor    Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  bookingId String?  @unique
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
 }

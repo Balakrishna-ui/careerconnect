@@ -34,10 +34,10 @@ export default function MentorsManagement() {
           <p className="text-sm text-muted-foreground">Manage all mentor profiles, verification, and status.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => alert("Exporting mentors list as CSV...")}>
             <Download className="w-4 h-4 mr-2" /> Export
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={() => alert("Opening Add Mentor modal...")}>
             <Plus className="w-4 h-4 mr-2" /> Add Mentor
           </Button>
         </div>

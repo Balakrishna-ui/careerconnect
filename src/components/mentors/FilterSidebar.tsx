@@ -249,7 +249,7 @@ export function FilterSidebar({
           <button
             onClick={() => onFiltersChange({
               experience: [], companies: [], roles: [], skills: [], industries: [],
-              goals: [], priceRange: [500, 5000], minRating: "",
+              goals: [], priceRange: [0, 5000], minRating: "",
               companyTiers: [], languages: [], locations: [],
               remoteAvailable: false, verified: false,
             })}
@@ -327,7 +327,7 @@ export function FilterSidebar({
 
       <FilterSection title="Session Price (₹)" defaultOpen={true}>
         <PriceSlider
-          min={500} max={5000}
+          min={0} max={5000}
           value={filters.priceRange}
           onChange={(v) => onFiltersChange({ ...filters, priceRange: v })}
         />

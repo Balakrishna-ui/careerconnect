@@ -3,11 +3,23 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { BriefcaseBusiness, Menu } from "lucide-react"
+import { BriefcaseBusiness, Menu, LogOut, User } from "lucide-react"
 import { cn } from "@/lib/utils";
+import { useSession, signOut } from "next-auth/react";
+import { JobSeekerAccountDrawer } from "@/components/layout/JobSeekerAccountDrawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Navbar() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
   
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -39,12 +51,99 @@ export function Navbar() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-3">
-            <Link href="/login" className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors px-3">
-              Log in
-            </Link>
-            <Link href="/signup" className={cn(buttonVariants({ variant: "default", size: "sm" }), "rounded-full px-6 shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all font-semibold")}>
-              Get Started
-            </Link>
+            {status === "loading" ? (
+              <div className="h-8 w-8 animate-pulse rounded-full bg-muted"></div>
+            ) : session ? (
+              <>
+                {session.user?.role === "JOB_SEEKER" ? (
+                  <JobSeekerAccountDrawer session={session} />
+                ) : (
+                  <DropdownMenu>
+                  <DropdownMenuTrigger render={
+                    <Button variant="outline" size="sm" className="rounded-full gap-2" />
+                  }>
+                    <User className="h-4 w-4" />
+                    <span className="max-w-[100px] truncate">{session.user?.name?.split(' ')[0]}</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                  
+                  {session.user?.role === "MENTOR" ? (
+                    <>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Mentor Dashboard</DropdownMenuLabel>
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem render={<Link href="/mentor/dashboard" className="cursor-pointer w-full" />}>
+                        Overview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/profile" className="cursor-pointer w-full" />}>
+                        Profile Management
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/session-pricing" className="cursor-pointer w-full" />}>
+                        Session Types & Pricing
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/availability" className="cursor-pointer w-full" />}>
+                        Availability
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/bookings" className="cursor-pointer w-full" />}>
+                        Bookings / Sessions
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/earnings" className="cursor-pointer w-full" />}>
+                        Earnings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/mentor/reviews" className="cursor-pointer w-full" />}>
+                        Reviews
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/messages" className="cursor-pointer w-full" />}>
+                        Messages
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/settings" className="cursor-pointer w-full" />}>
+                        Settings
+                      </DropdownMenuItem>
+                    </>
+                  ) : session.user?.role === "ADMIN" ? (
+                    <>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Admin Panel</DropdownMenuLabel>
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem render={<Link href="/admin/dashboard" className="cursor-pointer w-full" />}>
+                        Dashboard
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    className="cursor-pointer text-red-600 focus:text-red-600"
+                    onClick={() => signOut({ callbackUrl: '/' })}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+                )}
+              </>
+            ) : (
+              <>
+                <Link 
+                  href="/signup?view=login" 
+                  onClick={(e) => {
+                    if (pathname === '/signup') {
+                      e.preventDefault();
+                      window.dispatchEvent(new Event('openLogin'));
+                    }
+                  }}
+                  className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors px-3"
+                >
+                  Log in
+                </Link>
+                <Link href="/signup" className={cn(buttonVariants({ variant: "default", size: "sm" }), "rounded-full px-6 shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all font-semibold")}>
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
           <Button variant="outline" size="icon" className="md:hidden rounded-lg">
             <Menu className="h-5 w-5" />
