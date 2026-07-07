@@ -79,7 +79,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const expectedRole = credentials.role;
-        if (expectedRole && user.role !== expectedRole) {
+        if (expectedRole && user.role !== expectedRole && user.role !== 'ADMIN') {
           const switchMsg = user.role === 'MENTOR' ? 'Mentor' : 'Job Seeker';
           throw new Error(`This account is registered as a ${switchMsg}. Please switch to the ${switchMsg} login.`);
         }
