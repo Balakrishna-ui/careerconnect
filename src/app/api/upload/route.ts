@@ -14,14 +14,15 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Sanitize filename and add timestamp to prevent collisions
-    const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
-    const filepath = path.join(process.cwd(), "public", "uploads", filename);
+    // In Vercel, the filesystem is read-only (except /tmp). 
+    // To support uploads without external blob storage (like S3/Cloudinary),
+    // we convert the file to a Base64 Data URI and return it.
+    const base64Data = buffer.toString('base64');
+    const mimeType = file.type || 'application/octet-stream';
+    const dataUri = `data:${mimeType};base64,${base64Data}`;
 
-    await writeFile(filepath, buffer);
-
-    // Return the public URL path
-    return NextResponse.json({ url: `/uploads/${filename}` });
+    // Return the Data URI to be saved in the database
+    return NextResponse.json({ url: dataUri });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
