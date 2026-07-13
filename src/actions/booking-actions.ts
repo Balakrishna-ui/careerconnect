@@ -351,18 +351,24 @@ export async function createBooking(data: {
     },
   });
 
+  const isTestMode = process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
   let razorpayOrderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
   
-  try {
-    const { razorpay } = require("@/lib/razorpay");
-    const order = await razorpay.orders.create({
-      amount: service.price * 100,
-      currency: "INR",
-      receipt: booking.id
-    });
-    razorpayOrderId = order.id;
-  } catch (error) {
-    console.error("Razorpay order creation failed (falling back to mock ID):", error);
+  if (!isTestMode) {
+    try {
+      const { razorpay } = require("@/lib/razorpay");
+      const order = await razorpay.orders.create({
+        amount: service.price * 100,
+        currency: "INR",
+        receipt: booking.id
+      });
+      razorpayOrderId = order.id;
+    } catch (error) {
+      console.error("Razorpay order creation failed (falling back to mock ID):", error);
+    }
+  } else {
+    console.log("[Test Mode] Payment bypassed for order creation.");
+    razorpayOrderId = `test_order_${Date.now()}`;
   }
 
   await prisma.payment.create({

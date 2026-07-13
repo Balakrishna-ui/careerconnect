@@ -481,6 +481,35 @@ export default function BookingPageClient({
         return;
       }
 
+      const isTestMode = process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
+
+      if (isTestMode) {
+        // Step 2 (Test): Bypass Razorpay completely
+        const verifyRes = await fetch("/api/payment/verify-test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            test_order_id: result.razorpayOrderId,
+            metadata: { bookingId: result.bookingId }
+          }),
+        });
+        
+        if (verifyRes.ok) {
+          setBookingResult({
+            bookingId: result.bookingId!,
+            meetingLink: "Pending Mentor Approval",
+            date: selectedDate,
+            time: selectedSlot,
+          });
+          setStep(4);
+        } else {
+          const verifyData = await verifyRes.json();
+          alert("Test Payment verification failed: " + verifyData.error);
+        }
+        setIsProcessing(false);
+        return;
+      }
+
       // Step 2: Load Razorpay
       const res = await new Promise((resolve) => {
         const script = document.createElement("script");
@@ -579,7 +608,12 @@ export default function BookingPageClient({
   }
 
   return (
-    <div className="bg-muted/10 min-h-screen pb-24">
+    <div className="bg-muted/10 min-h-screen pb-24 relative">
+      {process.env.NEXT_PUBLIC_PAYMENT_MODE === "test" && (
+        <div className="fixed top-20 right-4 z-50 bg-amber-100 text-amber-800 px-3 py-1.5 rounded-full text-xs font-bold border border-amber-300 shadow-md flex items-center gap-1 animate-in slide-in-from-top-2">
+          <span>🧪 Test Mode – Payment Skipped</span>
+        </div>
+      )}
       {/* Top Navigation */}
       <div className="bg-background border-b sticky top-16 z-40">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
