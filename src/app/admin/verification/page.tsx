@@ -632,25 +632,44 @@ export default function VerificationDashboard() {
               </button>
             </div>
             <div className="flex-1 overflow-auto bg-gray-50/50 p-4">
-              {viewingDoc.startsWith('/uploads/') ? (
-                <iframe 
-                  src={viewingDoc} 
-                  className="w-full h-[70vh] rounded-xl shadow-sm border border-gray-200"
-                  title="Document Viewer"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-[50vh]">
-                  <div className="text-center space-y-4">
-                    <FileText className="w-24 h-24 text-gray-300 mx-auto" />
-                    <p className="text-gray-600 font-medium bg-white px-6 py-3 rounded-xl border border-gray-200 shadow-sm">
-                      {viewingDoc}
-                    </p>
-                    <p className="text-sm text-gray-400 max-w-sm mx-auto mt-2">
-                      (No preview available. This application was submitted before file uploads were enabled.)
-                    </p>
+              {(() => {
+                const isUrl = viewingDoc.startsWith('http') || viewingDoc.startsWith('/uploads/');
+                const isDataUri = viewingDoc.startsWith('data:');
+                // Basic check for raw base64 strings (long, no spaces)
+                const isRawBase64 = viewingDoc.length > 100 && !viewingDoc.includes(' ');
+                
+                let src = null;
+                if (isUrl || isDataUri) {
+                  src = viewingDoc;
+                } else if (isRawBase64) {
+                  const mimeType = viewingDoc.startsWith('JVBER') ? 'application/pdf' : 'image/jpeg';
+                  src = `data:${mimeType};base64,${viewingDoc}`;
+                }
+
+                if (src) {
+                  return (
+                    <iframe 
+                      src={src} 
+                      className="w-full h-[70vh] rounded-xl shadow-sm border border-gray-200"
+                      title="Document Viewer"
+                    />
+                  );
+                }
+
+                return (
+                  <div className="flex items-center justify-center h-[50vh]">
+                    <div className="text-center space-y-4">
+                      <FileText className="w-24 h-24 text-gray-300 mx-auto" />
+                      <p className="text-gray-600 font-medium bg-white px-6 py-3 rounded-xl border border-gray-200 shadow-sm max-h-32 overflow-hidden text-ellipsis break-all">
+                        {viewingDoc}
+                      </p>
+                      <p className="text-sm text-gray-400 max-w-sm mx-auto mt-2">
+                        (No preview available. This application was submitted before file uploads were enabled or format is unsupported.)
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>
