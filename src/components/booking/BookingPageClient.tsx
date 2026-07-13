@@ -481,7 +481,8 @@ export default function BookingPageClient({
         return;
       }
 
-      const isTestMode = process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
+      // Force test mode for testing phase
+      const isTestMode = true; // process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
 
       if (isTestMode) {
         // Step 2 (Test): Bypass Razorpay completely
@@ -609,7 +610,8 @@ export default function BookingPageClient({
 
   return (
     <div className="bg-muted/10 min-h-screen pb-24 relative">
-      {process.env.NEXT_PUBLIC_PAYMENT_MODE === "test" && (
+      {/* Force test mode for testing phase */}
+      {true && (
         <div className="fixed top-20 right-4 z-50 bg-amber-100 text-amber-800 px-3 py-1.5 rounded-full text-xs font-bold border border-amber-300 shadow-md flex items-center gap-1 animate-in slide-in-from-top-2">
           <span>🧪 Test Mode – Payment Skipped</span>
         </div>

@@ -4,7 +4,8 @@ import { format } from "date-fns";
 
 export async function POST(req: NextRequest) {
   try {
-    const isTestMode = process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
+    // Force test mode
+    const isTestMode = true; // process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
     
     if (!isTestMode) {
       return NextResponse.json(

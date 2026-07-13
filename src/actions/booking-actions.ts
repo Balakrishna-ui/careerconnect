@@ -351,7 +351,8 @@ export async function createBooking(data: {
     },
   });
 
-  const isTestMode = process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
+  // Force test mode for testing phase
+  const isTestMode = true; // process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
   let razorpayOrderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
   
   if (!isTestMode) {
