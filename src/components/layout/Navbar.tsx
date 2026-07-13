@@ -31,7 +31,15 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/70 backdrop-blur-xl border-border/40 shadow-sm transition-all duration-300">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 group transition-transform hover:scale-[1.02]">
+          <Link 
+            href={
+              session?.user?.role === "MENTOR" ? "/mentor/dashboard" : 
+              session?.user?.role === "JOB_SEEKER" ? "/dashboard" : 
+              session?.user?.role === "ADMIN" ? "/admin/dashboard" : 
+              "/"
+            } 
+            className="flex items-center gap-2 group transition-transform hover:scale-[1.02]"
+          >
             <div className="bg-primary p-2 rounded-xl shadow-md shadow-primary/20 group-hover:shadow-primary/40 transition-all">
               <BriefcaseBusiness className="h-5 w-5 text-primary-foreground" />
             </div>
