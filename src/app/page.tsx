@@ -11,6 +11,9 @@ import {
   BarChart3,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 const FADE_UP_ANIMATION_VARIANTS: any = {
   hidden: { opacity: 0, y: 20 },
@@ -18,6 +21,25 @@ const FADE_UP_ANIMATION_VARIANTS: any = {
 };
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.role) {
+      if (session.user.role === "MENTOR") {
+        router.push("/mentor/dashboard");
+      } else if (session.user.role === "JOB_SEEKER") {
+        router.push("/dashboard");
+      } else if (session.user.role === "ADMIN") {
+        router.push("/admin/dashboard");
+      }
+    }
+  }, [status, session, router]);
+
+  if (status === "authenticated") {
+    return null; // Don't render landing page while redirecting
+  }
+
   return (
     <div className="flex flex-col bg-[#FAFBFF] overflow-x-hidden font-sans min-h-screen">
       

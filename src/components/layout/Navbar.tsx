@@ -40,15 +40,19 @@ export function Navbar() {
             </span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-muted-foreground">
-            <Link href="/mentors" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname?.startsWith("/mentors") && "text-foreground after:w-full")}>
-              Find Mentors
-            </Link>
-            <Link href="/companies" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname?.startsWith("/companies") && "text-foreground after:w-full")}>
-              Companies
-            </Link>
-            <Link href="/about" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname === "/about" && "text-foreground after:w-full")}>
-              About Us
-            </Link>
+            {session?.user?.role !== "MENTOR" && session?.user?.role !== "ADMIN" && (
+              <>
+                <Link href="/mentors" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname?.startsWith("/mentors") && "text-foreground after:w-full")}>
+                  Find Mentors
+                </Link>
+                <Link href="/companies" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname?.startsWith("/companies") && "text-foreground after:w-full")}>
+                  Companies
+                </Link>
+                <Link href="/about" className={cn("transition-colors hover:text-foreground relative after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300", pathname === "/about" && "text-foreground after:w-full")}>
+                  About Us
+                </Link>
+              </>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-4">
@@ -163,27 +167,31 @@ export function Navbar() {
       {isMobileMenuOpen && (
         <div className="md:hidden border-t bg-background/95 backdrop-blur-xl">
           <nav className="flex flex-col p-4 space-y-4">
-            <Link 
-              href="/mentors" 
-              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/mentors") && "bg-muted text-primary")}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Find Mentors
-            </Link>
-            <Link 
-              href="/companies" 
-              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/companies") && "bg-muted text-primary")}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Companies
-            </Link>
-            <Link 
-              href="/about" 
-              className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname === "/about" && "bg-muted text-primary")}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              About Us
-            </Link>
+            {session?.user?.role !== "MENTOR" && session?.user?.role !== "ADMIN" && (
+              <>
+                <Link 
+                  href="/mentors" 
+                  className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/mentors") && "bg-muted text-primary")}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Find Mentors
+                </Link>
+                <Link 
+                  href="/companies" 
+                  className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname?.startsWith("/companies") && "bg-muted text-primary")}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Companies
+                </Link>
+                <Link 
+                  href="/about" 
+                  className={cn("text-sm font-semibold p-2 rounded-md hover:bg-muted", pathname === "/about" && "bg-muted text-primary")}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  About Us
+                </Link>
+              </>
+            )}
             {!session && (
               <div className="flex flex-col gap-2 pt-2 border-t">
                 <Link 
