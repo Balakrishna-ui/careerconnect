@@ -27,6 +27,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [viewMode, setViewMode] = useState<"signup" | "login" | "forgotPassword">("signup");
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
+  const [resetLinkUrl, setResetLinkUrl] = useState<string>("");
   const router = useRouter();
 
   useEffect(() => {
@@ -159,12 +160,27 @@ export default function SignupPage() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setResetLinkUrl("");
     
-    // Simulate forgot password API call
-    setTimeout(() => {
-      setError("If an account exists with this email, a reset link has been sent.");
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.resetLink) {
+        setError("A reset link has been generated for you.");
+        setResetLinkUrl(data.resetLink);
+      } else {
+        setError("If an account exists with this email, a reset link has been sent.");
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const fadeVariants = {
@@ -644,8 +660,15 @@ export default function SignupPage() {
                       <form onSubmit={handleForgotPasswordSubmit}>
                         <div className="grid gap-2.5">
                           {error && (
-                            <div className={`p-3 text-sm rounded-md border ${error.includes('sent') ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-red-500 bg-red-50 border-red-200'}`}>
+                            <div className={`p-3 text-sm rounded-md border ${error.includes('sent') || error.includes('generated') ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-red-500 bg-red-50 border-red-200'}`}>
                               {error}
+                              {resetLinkUrl && (
+                                <div className="mt-2 text-xs font-medium bg-white p-2 rounded border border-emerald-100 break-all">
+                                  <a href={resetLinkUrl} className="text-blue-600 hover:underline">
+                                    Click here to reset your password
+                                  </a>
+                                </div>
+                              )}
                             </div>
                           )}
                           <div className="grid gap-1.5">

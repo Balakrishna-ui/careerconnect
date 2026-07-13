@@ -34,20 +34,19 @@ export async function POST(request: Request) {
     });
 
     // Send the email using Nodemailer
-    const resetLink = `${process.env.APP_URL || "http://localhost:3000"}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const url = new URL(request.url);
+    const origin = url.origin;
+    const resetLink = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     
-    // Import dynamically or assume it's imported at the top. Wait, better to import at top. Let me change the whole file import if needed.
-    // I will just use the utility here.
     const { sendPasswordResetEmail } = await import("@/lib/email");
     const emailResult = await sendPasswordResetEmail(email, resetLink, user.name || "User");
     
     if (!emailResult.success) {
       console.error("Failed to send reset email", emailResult.error);
-      // We still return 200 to prevent email enumeration, but log the error.
     }
 
     return NextResponse.json(
-      { message: "Reset link sent if email exists" },
+      { message: "Reset link generated", resetLink },
       { status: 200 }
     );
   } catch (error) {
