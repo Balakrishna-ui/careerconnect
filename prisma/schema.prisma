@@ -226,9 +226,26 @@ model Booking {
   price         Int
   meetingLink   String?
   payment       Payment?
+  rescheduleReq RescheduleRequest?
   notifications Notification[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model RescheduleRequest {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  mentorId      String
+  jobSeekerId   String
+  oldDate       DateTime
+  oldStartTime  DateTime
+  requestedDate DateTime
+  requestedTime DateTime 
+  reason        String?
+  status        String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Payment {

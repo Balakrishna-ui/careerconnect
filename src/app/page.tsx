@@ -31,7 +31,7 @@ export default function Home() {
       } else if (session.user.role === "JOB_SEEKER") {
         router.push("/dashboard");
       } else if (session.user.role === "ADMIN") {
-        router.push("/admin/dashboard");
+        router.push("/admin");
       }
     }
   }, [status, session, router]);

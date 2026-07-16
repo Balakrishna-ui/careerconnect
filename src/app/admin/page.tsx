@@ -1,27 +1,45 @@
 "use client";
 
 import { KPICard } from "@/components/admin/KPICard";
-import { ADMIN_KPI, REVENUE_TREND, USER_GROWTH_TREND, VERIFICATION_STATUS_PIE, ADMIN_SESSIONS, ADMIN_JOB_SEEKERS, ADMIN_PAYMENTS } from "@/lib/admin-mock-data";
 import { Users, GraduationCap, ShieldCheck, DollarSign, Activity, CalendarDays, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import Link from "next/link";
+import useSWR from "swr";
+import { getAdminKPIs, getAdminRevenueTrend, getUserGrowthTrend, getVerificationStatusStats, getRecentAdminSessions } from "@/actions/admin-dashboard-actions";
 
 export default function AdminDashboard() {
+  const fetcher = <T,>(action: () => Promise<T>) => action();
+  const refreshInterval = 10000; // Poll every 10 seconds
+
+  const { data: kpis, isLoading: loadingKpis } = useSWR('kpis', () => fetcher(getAdminKPIs), { refreshInterval });
+  const { data: revenueTrend, isLoading: loadingRevenue } = useSWR('revenueTrend', () => fetcher(getAdminRevenueTrend), { refreshInterval });
+  const { data: userGrowth, isLoading: loadingGrowth } = useSWR('userGrowth', () => fetcher(getUserGrowthTrend), { refreshInterval });
+  const { data: pieStats, isLoading: loadingPie } = useSWR('pieStats', () => fetcher(getVerificationStatusStats), { refreshInterval });
+  const { data: recentSessions, isLoading: loadingSessions } = useSWR('recentSessions', () => fetcher(getRecentAdminSessions), { refreshInterval });
+
   return (
     <div className="space-y-6">
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Users" value={ADMIN_KPI.totalUsers} icon={Users} trend={ADMIN_KPI.userGrowth} />
-        <KPICard title="Total Mentors" value={ADMIN_KPI.totalMentors} icon={GraduationCap} />
-        <KPICard title="Total Job Seekers" value={ADMIN_KPI.totalJobSeekers} icon={Users} />
-        <KPICard title="Verified Mentors" value={ADMIN_KPI.verifiedMentors} icon={ShieldCheck} />
-        
-        <KPICard title="Pending Verifications" value={ADMIN_KPI.pendingVerifications} icon={Activity} />
-        <KPICard title="Today's Sessions" value={ADMIN_KPI.todaySessions} icon={CalendarDays} trend={ADMIN_KPI.sessionGrowth} />
-        <KPICard title="Total Revenue" value={ADMIN_KPI.totalRevenue} icon={DollarSign} valuePrefix="$" trend={ADMIN_KPI.revenueGrowth} />
-        <KPICard title="Monthly Revenue" value={ADMIN_KPI.monthlyRevenue} icon={DollarSign} valuePrefix="$" />
+        {loadingKpis || !kpis ? (
+          Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} className="animate-pulse bg-muted/20 h-28" />
+          ))
+        ) : (
+          <>
+            <KPICard title="Total Users" value={kpis.totalUsers} icon={Users} trend={kpis.userGrowth} />
+            <KPICard title="Total Mentors" value={kpis.totalMentors} icon={GraduationCap} />
+            <KPICard title="Total Job Seekers" value={kpis.totalJobSeekers} icon={Users} />
+            <KPICard title="Verified Mentors" value={kpis.verifiedMentors} icon={ShieldCheck} />
+            
+            <KPICard title="Pending Verifications" value={kpis.pendingVerifications} icon={Activity} />
+            <KPICard title="Today's Sessions" value={kpis.todaySessions} icon={CalendarDays} trend={kpis.sessionGrowth} />
+            <KPICard title="Total Revenue" value={kpis.totalRevenue} icon={DollarSign} valuePrefix="₹" trend={kpis.revenueGrowth} />
+            <KPICard title="Monthly Revenue" value={kpis.monthlyRevenue} icon={DollarSign} valuePrefix="₹" />
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -32,21 +50,25 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_TREND}>
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              {loadingRevenue || !revenueTrend ? (
+                <div className="w-full h-full animate-pulse bg-muted/20 rounded-md" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={revenueTrend}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
+                    <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value/1000}k`} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
+                    <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -58,16 +80,20 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={USER_GROWTH_TREND}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{ fill: '#374151', opacity: 0.4 }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
-                  <Bar dataKey="jobSeekers" name="Job Seekers" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="mentors" name="Mentors" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {loadingGrowth || !userGrowth ? (
+                <div className="w-full h-full animate-pulse bg-muted/20 rounded-md" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={userGrowth}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
+                    <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: '#374151', opacity: 0.4 }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
+                    <Bar dataKey="jobSeekers" name="Job Seekers" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="mentors" name="Mentors" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -80,34 +106,42 @@ export default function AdminDashboard() {
             <CardTitle className="text-base">Mentor Verifications</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[250px] flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={VERIFICATION_STATUS_PIE}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {VERIFICATION_STATUS_PIE.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap justify-center gap-4 mt-2">
-              {VERIFICATION_STATUS_PIE.map((entry) => (
-                <div key={entry.name} className="flex items-center gap-2 text-xs">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                  <span className="text-muted-foreground">{entry.name}</span>
+            {loadingPie || !pieStats ? (
+              <div className="w-full h-[250px] animate-pulse bg-muted/20 rounded-full" />
+            ) : pieStats.length === 0 ? (
+              <div className="w-full h-[250px] flex items-center justify-center text-muted-foreground">No data available</div>
+            ) : (
+              <>
+                <div className="h-[250px] flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieStats}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {pieStats.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                  {pieStats.map((entry) => (
+                    <div key={entry.name} className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                      <span className="text-muted-foreground">{entry.name} ({entry.value})</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -121,23 +155,31 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4 mt-4">
-              {ADMIN_SESSIONS.slice(0, 5).map((session) => (
-                <div key={session.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium">
-                      {session.jobSeekerName.charAt(0)}
+              {loadingSessions || !recentSessions ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-16 w-full animate-pulse bg-muted/20 rounded-md" />
+                ))
+              ) : recentSessions.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">No recent sessions found</div>
+              ) : (
+                recentSessions.map((session) => (
+                  <div key={session.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium">
+                        {session.jobSeekerName.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{session.jobSeekerName} &rarr; {session.mentorName}</p>
+                        <p className="text-xs text-muted-foreground">{session.date} at {session.time} &bull; {session.duration}m</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">{session.jobSeekerName} → {session.mentorName}</p>
-                      <p className="text-xs text-muted-foreground">{session.date} at {session.time} • {session.duration}m</p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">₹{session.amount}</p>
+                      <StatusBadge status={session.sessionStatus as any} className="text-[10px] px-1.5 py-0 mt-1" />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold">${session.amount}</p>
-                    <StatusBadge status={session.sessionStatus} className="text-[10px] px-1.5 py-0 mt-1" />
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

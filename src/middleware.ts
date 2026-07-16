@@ -17,7 +17,7 @@ export default withAuth(
         return NextResponse.redirect(new URL("/dashboard", req.url));
       }
       if (token.role === "ADMIN" && (isPublicRoute || path === "/admin-login")) {
-        return NextResponse.redirect(new URL("/admin/dashboard", req.url));
+        return NextResponse.redirect(new URL("/admin", req.url));
       }
     }
 

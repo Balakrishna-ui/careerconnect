@@ -1,12 +1,16 @@
 "use client";
 
-import { CONVERSION_FUNNEL, TOP_SEARCHED_ROLES, TOP_BOOKED_COMPANIES, USER_RETENTION } from "@/lib/admin-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { Download, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import useSWR from "swr";
+import { getAdminAnalyticsData } from "@/actions/admin-analytics-actions";
 
 export default function AnalyticsDashboard() {
+  const fetcher = <T,>(action: () => Promise<T>) => action();
+  const { data, isLoading } = useSWR('adminAnalytics', () => fetcher(getAdminAnalyticsData), { refreshInterval: 10000 });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -33,15 +37,19 @@ export default function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={CONVERSION_FUNNEL} layout="vertical" margin={{ left: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#374151" />
-                  <XAxis type="number" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis dataKey="stage" type="category" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{ fill: '#374151', opacity: 0.2 }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={30} />
-                </BarChart>
-              </ResponsiveContainer>
+              {isLoading || !data ? (
+                <div className="w-full h-full animate-pulse bg-muted/20 rounded-md" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.funnel} layout="vertical" margin={{ left: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#374151" />
+                    <XAxis type="number" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis dataKey="stage" type="category" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: '#374151', opacity: 0.2 }} contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={30} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -54,15 +62,19 @@ export default function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={USER_RETENTION}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
-                  <XAxis dataKey="week" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
-                  <Line type="monotone" dataKey="retention" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {isLoading || !data ? (
+                <div className="w-full h-full animate-pulse bg-muted/20 rounded-md" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.retention}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
+                    <XAxis dataKey="week" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f9fafb' }} />
+                    <Line type="monotone" dataKey="retention" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -75,23 +87,31 @@ export default function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {TOP_SEARCHED_ROLES.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground font-medium w-4">{idx + 1}.</span>
-                    <span className="font-medium text-sm">{item.role}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-500 rounded-full" 
-                        style={{ width: `${(item.searches / TOP_SEARCHED_ROLES[0].searches) * 100}%` }}
-                      />
+              {isLoading || !data ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-6 w-full animate-pulse bg-muted/20 rounded-md" />
+                ))
+              ) : data.topRoles.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">No roles found</div>
+              ) : (
+                data.topRoles.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground font-medium w-4">{idx + 1}.</span>
+                      <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-[180px]">{item.role}</span>
                     </div>
-                    <span className="text-sm font-medium w-12 text-right">{item.searches.toLocaleString()}</span>
+                    <div className="flex items-center gap-4">
+                      <div className="hidden sm:block w-32 h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full" 
+                          style={{ width: `${(item.searches / (data.topRoles[0]?.searches || 1)) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium w-12 text-right">{item.searches.toLocaleString()}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -104,23 +124,31 @@ export default function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {TOP_BOOKED_COMPANIES.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground font-medium w-4">{idx + 1}.</span>
-                    <span className="font-medium text-sm">{item.company}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-purple-500 rounded-full" 
-                        style={{ width: `${(item.bookings / TOP_BOOKED_COMPANIES[0].bookings) * 100}%` }}
-                      />
+              {isLoading || !data ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-6 w-full animate-pulse bg-muted/20 rounded-md" />
+                ))
+              ) : data.topCompanies.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">No companies found</div>
+              ) : (
+                data.topCompanies.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground font-medium w-4">{idx + 1}.</span>
+                      <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-[180px]">{item.company}</span>
                     </div>
-                    <span className="text-sm font-medium w-12 text-right">{item.bookings.toLocaleString()}</span>
+                    <div className="flex items-center gap-4">
+                      <div className="hidden sm:block w-32 h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 rounded-full" 
+                          style={{ width: `${(item.bookings / (data.topCompanies[0]?.bookings || 1)) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium w-12 text-right">{item.bookings.toLocaleString()}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

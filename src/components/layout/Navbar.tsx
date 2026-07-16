@@ -35,7 +35,7 @@ export function Navbar() {
             href={
               session?.user?.role === "MENTOR" ? "/mentor/dashboard" : 
               session?.user?.role === "JOB_SEEKER" ? "/dashboard" : 
-              session?.user?.role === "ADMIN" ? "/admin/dashboard" : 
+              session?.user?.role === "ADMIN" ? "/admin" : 
               "/"
             } 
             className="flex items-center gap-2 group transition-transform hover:scale-[1.02]"
@@ -121,8 +121,10 @@ export function Navbar() {
                         <DropdownMenuLabel>Admin Panel</DropdownMenuLabel>
                       </DropdownMenuGroup>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/admin/dashboard" className="cursor-pointer w-full" />}>
-                        Dashboard
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin" className="cursor-pointer w-full">
+                          Dashboard
+                        </Link>
                       </DropdownMenuItem>
                     </>
                   ) : null}
