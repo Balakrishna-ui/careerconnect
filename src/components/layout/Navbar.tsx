@@ -121,10 +121,8 @@ export function Navbar() {
                         <DropdownMenuLabel>Admin Panel</DropdownMenuLabel>
                       </DropdownMenuGroup>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin" className="cursor-pointer w-full">
-                          Dashboard
-                        </Link>
+                      <DropdownMenuItem render={<Link href="/admin" className="cursor-pointer w-full" />}>
+                        Dashboard
                       </DropdownMenuItem>
                     </>
                   ) : null}
