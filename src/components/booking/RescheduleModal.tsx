@@ -12,6 +12,7 @@ interface RescheduleModalProps {
   bookingId: string;
   mentorId: string;
   currentDate: Date;
+  duration: number;
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -20,7 +21,7 @@ interface RescheduleModalProps {
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function RescheduleModal({ bookingId, mentorId, currentDate, isOpen, onClose, onSuccess }: RescheduleModalProps) {
+export function RescheduleModal({ bookingId, mentorId, currentDate, duration, isOpen, onClose, onSuccess }: RescheduleModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -66,8 +67,7 @@ export function RescheduleModal({ bookingId, mentorId, currentDate, isOpen, onCl
   const fetchSlots = async (dateStr: string) => {
     setIsLoading(true);
     try {
-      // Assuming 60 mins duration for now, in a real app we fetch the original session duration
-      const slots = await getAvailableSlots(mentorId, dateStr, 60);
+      const slots = await getAvailableSlots(mentorId, dateStr, duration);
       setAvailableSlots(slots);
     } catch (e) {
       console.error(e);

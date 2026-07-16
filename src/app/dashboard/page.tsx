@@ -235,6 +235,7 @@ export default async function JobSeekerDashboard() {
                               bookingId={booking.id}
                               mentorId={booking.mentorId}
                               currentDate={new Date(booking.startTime)}
+                              duration={Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60000)}
                               disabled={booking.rescheduleReq?.status === "PENDING" || isLive}
                             />
                           </div>

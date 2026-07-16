@@ -9,10 +9,11 @@ interface RescheduleButtonProps {
   bookingId: string;
   mentorId: string;
   currentDate: Date;
+  duration: number;
   disabled?: boolean;
 }
 
-export function RescheduleButton({ bookingId, mentorId, currentDate, disabled }: RescheduleButtonProps) {
+export function RescheduleButton({ bookingId, mentorId, currentDate, duration, disabled }: RescheduleButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
 
@@ -33,6 +34,7 @@ export function RescheduleButton({ bookingId, mentorId, currentDate, disabled }:
           bookingId={bookingId}
           mentorId={mentorId}
           currentDate={currentDate}
+          duration={duration}
           isOpen={isOpen}
           onClose={() => setIsOpen(false)}
           onSuccess={() => {
