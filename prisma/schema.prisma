@@ -62,6 +62,8 @@ model Mentor {
   reviewsCount    Int       @default(0)
   price           Int       @default(0)
   image           String?
+  coverImage      String?
+  resumeUrl       String?
   companyTier     String    @default("Other")
   location        String?
   languages       String? // comma separated list
@@ -73,6 +75,14 @@ model Mentor {
   profileCompleted  Boolean @default(false)
   completionScore   Int     @default(0) // 0 to 100
   applicationStatus String  @default("DRAFT") // DRAFT, PENDING, VERIFIED, REJECTED, MORE_INFO_REQUIRED
+
+  // Insight Metrics
+  profileViews      Int     @default(0)
+  searchAppearances Int     @default(0)
+  profileClicks     Int     @default(0)
+  responseRate      Int     @default(100)
+  earningsThisMonth Int     @default(0)
+  vacationMode      Boolean @default(false)
 
   // Step 1: Personal Info
   gender   String?
@@ -111,6 +121,8 @@ model Mentor {
 
   experiences Experience[]
   educations  Education[]
+  projects       Project[]
+  certifications Certification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -142,6 +154,12 @@ model SocialProfile {
   github    String?
   twitter   String?
   youtube   String?
+  website   String?
+  leetcode  String?
+  codechef  String?
+  hackerrank String?
+  behance   String?
+  dribbble  String?
 }
 
 model VerificationDocument {
@@ -311,6 +329,27 @@ model Education {
   degree      String
   passingYear String
   cgpa        String?
+}
+
+model Project {
+  id           String  @id @default(cuid())
+  mentorId     String
+  mentor       Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  title        String
+  description  String? @db.Text
+  githubUrl    String?
+  demoUrl      String?
+  technologies String? // comma separated
+}
+
+model Certification {
+  id       String  @id @default(cuid())
+  mentorId String
+  mentor   Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  name     String
+  issuer   String
+  year     String?
+  url      String?
 }
 
 // NextAuth Models

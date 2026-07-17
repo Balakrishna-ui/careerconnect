@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LeftProfileSidebar } from "@/components/mentor/sidebar/LeftProfileSidebar";
 
+import { ProfileLayoutClient } from "./ProfileLayoutClient";
+
 export default async function MentorLayout({
   children,
 }: {
@@ -30,7 +32,9 @@ export default async function MentorLayout({
       bookings: {
         where: { status: "CONFIRMED" }
       },
-      reviews: true
+      reviews: true,
+      projects: true,
+      certifications: true,
     },
   });
 
@@ -39,43 +43,30 @@ export default async function MentorLayout({
   }
 
   // Calculate some mock and real stats for performance card
-  const completedSessions = mentor.bookings.length; // assuming all confirmed are completed for demo
+  const completedSessions = mentor.bookings.length; 
   const bookingsCount = mentor.bookings.length;
   
   // Real rating calculation
   const rating = mentor.reviews.length > 0 
-    ? mentor.reviews.reduce((acc, rev) => acc + rev.rating, 0) / mentor.reviews.length 
+    ? mentor.reviews.reduce((acc: any, rev: any) => acc + rev.rating, 0) / mentor.reviews.length 
     : 0;
 
   // Mocks for performance card
-  const searchViews = 128;
-  const profileViews = 45;
-  const responseRate = 98;
+  const stats = {
+    searchViews: 128,
+    profileViews: 45,
+    responseRate: 98,
+    completedSessions,
+    bookings: bookingsCount,
+    rating
+  };
 
   return (
     <div className="bg-[#f8f9fa] min-h-screen pb-12">
       <div className="container mx-auto px-4 py-8 max-w-[1400px]">
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
-          
-          {/* Left Profile Sidebar (22% on desktop) */}
-          <aside className="w-full lg:w-[280px] xl:w-[320px] shrink-0">
-            <LeftProfileSidebar 
-              mentor={mentor}
-              searchViews={searchViews}
-              profileViews={profileViews}
-              bookings={bookingsCount}
-              completedSessions={completedSessions}
-              responseRate={responseRate}
-              rating={rating}
-            />
-          </aside>
-
-          {/* Main Content Area (Remaining width) */}
-          <main className="flex-1 min-w-0 w-full">
-            {children}
-          </main>
-          
-        </div>
+        <ProfileLayoutClient mentor={mentor} stats={stats}>
+          {children}
+        </ProfileLayoutClient>
       </div>
     </div>
   );

@@ -79,7 +79,14 @@ export function ProfileHealthCard({
             {headline || "Complete your profile to add a headline"}
           </p>
           
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-xs text-muted-foreground">
+          <Link 
+            href="/mentor/profile" 
+            className="w-[85%] mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-full flex items-center justify-center transition-colors text-sm shadow-sm"
+          >
+            View & Update Profile
+          </Link>
+          
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-4 text-xs text-muted-foreground">
             {company && (
               <span className="flex items-center gap-1">
                 <Building className="w-3.5 h-3.5" />
@@ -145,17 +152,6 @@ export function ProfileHealthCard({
               </ul>
             </div>
           )}
-          
-          <Link href="/mentor/profile" className="w-full mt-4 block">
-            <Button 
-              variant={completionScore === 100 ? "outline" : "default"}
-              className={completionScore === 100 
-                ? "w-full rounded-xl shadow-sm font-semibold border-primary/20 hover:bg-primary/5" 
-                : "w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold"}
-            >
-              {completionScore === 100 ? "Edit Profile" : "Complete Profile"}
-            </Button>
-          </Link>
         </div>
       </CardContent>
     </Card>

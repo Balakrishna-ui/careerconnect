@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 
+import { useMentorProfile } from "@/contexts/MentorProfileContext";
+
 interface LeftProfileSidebarProps {
-  mentor: any;
+  initialMentor?: any;
   searchViews: number;
   profileViews: number;
   bookings: number;
@@ -17,7 +19,7 @@ interface LeftProfileSidebarProps {
 }
 
 export function LeftProfileSidebar({
-  mentor,
+  initialMentor,
   searchViews,
   profileViews,
   bookings,
@@ -25,39 +27,23 @@ export function LeftProfileSidebar({
   responseRate,
   rating
 }: LeftProfileSidebarProps) {
-  const { score, missingFields } = calculateProfileCompletion(mentor);
+  const { mentorData, completionScore, missingDetails } = useMentorProfile();
+  
+  const mentor = mentorData || initialMentor;
   
   // Calculate total experience in years (naive approach for demo)
   let expYears = 0;
-  if (mentor.experiences && mentor.experiences.length > 0) {
-    // Basic logic assuming array length as years or similar. A real app would sum dates.
+  if (mentor?.experiences && mentor.experiences.length > 0) {
     expYears = mentor.experiences.length * 2; 
   }
 
+  const missingFields = missingDetails.map(field => ({
+    label: field,
+    href: "#"
+  }));
+
   return (
     <div className="space-y-6 sticky top-6">
-      <ProfileHealthCard 
-        mentorName={mentor.user?.name || "Mentor"}
-        image={mentor.user?.image}
-        headline={mentor.headline}
-        company={mentor.company}
-        location="Remote" // Mocked as DB doesn't have it directly mapped to Mentor model in snippet
-        experience={expYears > 0 ? expYears : null}
-        isVerified={mentor.documents?.some((d: any) => d.status === "VERIFIED")}
-        completionScore={score}
-        missingFields={missingFields}
-        lastUpdated="Today"
-      />
-      
-      <ProfilePerformanceCard 
-        searchViews={searchViews}
-        profileViews={profileViews}
-        bookings={bookings}
-        completedSessions={completedSessions}
-        responseRate={responseRate}
-        rating={rating}
-      />
-      
       <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
         <h3 className="font-bold text-foreground mb-3 px-3 text-sm">Navigation</h3>
         <nav className="flex flex-col gap-1">
@@ -70,6 +56,28 @@ export function LeftProfileSidebar({
           </Link>
         </nav>
       </div>
+
+      <ProfileHealthCard 
+        mentorName={mentor?.user?.name || mentor?.name || "Mentor"}
+        image={mentor?.image || mentor?.user?.image}
+        headline={mentor?.headline}
+        company={mentor?.company}
+        location={mentor?.location || mentor?.city || "Remote"}
+        experience={expYears > 0 ? expYears : null}
+        isVerified={mentor?.documents?.some((d: any) => d.status === "VERIFIED")}
+        completionScore={completionScore}
+        missingFields={missingFields}
+        lastUpdated="Today"
+      />
+      
+      <ProfilePerformanceCard 
+        searchViews={searchViews}
+        profileViews={profileViews}
+        bookings={bookings}
+        completedSessions={completedSessions}
+        responseRate={responseRate}
+        rating={rating}
+      />
     </div>
   );
 }
