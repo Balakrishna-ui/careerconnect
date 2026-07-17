@@ -14,7 +14,7 @@ export async function acceptBooking(bookingId: string, meetingLink: string) {
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { mentor: true },
+      include: { mentor: true, user: true },
     });
 
     if (!booking || booking.mentor.userId !== session.user.id) {
@@ -33,8 +33,24 @@ export async function acceptBooking(bookingId: string, meetingLink: string) {
         meetingLink: meetingLink,
       },
     });
+    
+    // Update mentor total sessions
+    await prisma.mentor.update({
+      where: { id: booking.mentorId },
+      data: { totalSessions: { increment: 1 } },
+    });
 
-    // TODO: Trigger email notification to Job Seeker here
+    // Notify Job Seeker
+    await prisma.notification.create({
+      data: {
+        bookingId,
+        userId: booking.userId,
+        mentorId: booking.mentorId,
+        type: "BOOKING_ACCEPTED",
+        message: `${booking.mentor.name} accepted your booking. Meeting Link is ready.`,
+        status: "PENDING",
+      },
+    });
 
     revalidatePath("/mentor/dashboard");
     revalidatePath("/mentor/bookings");
@@ -71,7 +87,19 @@ export async function rejectBooking(bookingId: string, reason?: string) {
     await prisma.booking.update({
       where: { id: bookingId },
       data: {
-        status: "CANCELLED",
+        status: "REJECTED",
+      },
+    });
+
+    // Notify Job Seeker
+    await prisma.notification.create({
+      data: {
+        bookingId,
+        userId: booking.userId,
+        mentorId: booking.mentorId,
+        type: "BOOKING_REJECTED",
+        message: `Your booking with ${booking.mentor.name} was declined. ${reason ? `Reason: ${reason}` : ''}`,
+        status: "PENDING",
       },
     });
 
@@ -88,3 +116,4 @@ export async function rejectBooking(bookingId: string, reason?: string) {
     return { success: false, error: "Failed to reject booking" };
   }
 }
+

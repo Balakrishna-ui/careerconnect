@@ -24,17 +24,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate a mock meeting link
-    const meetingLink = `https://meet.google.com/sas-${bookingId.slice(0, 4)}-${bookingId.slice(4, 8)}`;
-
     const testPaymentId = `TEST_PAY_${Date.now()}`;
 
     // Update booking
     const booking = await prisma.booking.update({
       where: { id: bookingId },
       data: {
-        status: "CONFIRMED",
-        meetingLink,
+        status: "PENDING",
       },
       include: {
         mentor: true,
@@ -51,25 +47,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Update mentor total sessions
-    await prisma.mentor.update({
-      where: { id: booking.mentorId },
-      data: { totalSessions: { increment: 1 } },
-    });
-
-    // Create notification
+    // Create notification for Mentor
     await prisma.notification.create({
       data: {
         bookingId,
         userId: booking.userId,
         mentorId: booking.mentorId,
-        type: "EMAIL",
-        message: `[TEST MODE] Your session with ${booking.mentor.name} has been confirmed for ${format(new Date(booking.startTime), "PPP 'at' p")}.`,
-        status: "SENT",
+        type: "NEW_BOOKING_REQUEST",
+        message: `[TEST MODE] You have a new session request from ${booking.user.name} for ${format(new Date(booking.startTime), "PPP 'at' p")}.`,
+        status: "PENDING",
       },
     });
 
-    console.log(`[Test Mode] Booking created successfully.`);
+    console.log(`[Test Mode] Booking request created successfully.`);
     console.log(`[Test Mode] Booking ID: ${bookingId}`);
     console.log(`[Test Mode] Mentor: ${booking.mentor.name}`);
     console.log(`[Test Mode] Job Seeker: ${booking.user.name}`);
