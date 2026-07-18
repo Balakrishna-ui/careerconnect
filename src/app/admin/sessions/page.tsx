@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { ADMIN_SESSIONS } from "@/lib/admin-mock-data";
+import { useState, useEffect } from "react";
+import { getAdminSessions } from "@/actions/admin-actions";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { Search, Filter, MoreVertical, Calendar, Clock, DollarSign, Download, Video } from "lucide-react";
+import { Search, Filter, MoreVertical, Calendar, Clock, DollarSign, Download, Video, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,8 +18,24 @@ import { Input } from "@/components/ui/input";
 
 export default function SessionsManagement() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredSessions = ADMIN_SESSIONS.filter(
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getAdminSessions();
+        setSessions(data);
+      } catch (error) {
+        console.error("Failed to load sessions", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredSessions = sessions.filter(
     (s) =>
       s.mentorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.jobSeekerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -74,69 +90,79 @@ export default function SessionsManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredSessions.map((session) => (
-                  <tr key={session.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">{session.id}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">{session.mentorName}</div>
-                      <div className="text-xs text-muted-foreground">{session.mentorCompany}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-foreground">
-                      {session.jobSeekerName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        {session.date}
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center">
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+                        <span className="text-muted-foreground">Loading sessions...</span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {session.time} ({session.duration}m)
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium flex items-center mb-1">
-                        <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
-                        {session.amount}
-                      </div>
-                      <StatusBadge status={session.paymentStatus} className="text-[10px] px-1.5 py-0" />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={session.sessionStatus} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="flex items-center justify-center h-8 w-8 p-0 rounded-md hover:bg-muted hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                          <span className="sr-only">Open menu</span>
-                          <MoreVertical className="h-4 w-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>View Details</DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Video className="w-4 h-4 mr-2" /> Join Call
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {session.sessionStatus === "scheduled" && (
-                            <>
-                              <DropdownMenuItem>Reschedule Session</DropdownMenuItem>
-                              <DropdownMenuItem className="text-amber-600">Cancel Session</DropdownMenuItem>
-                            </>
-                          )}
-                          {session.paymentStatus === "success" && (
-                            <DropdownMenuItem className="text-red-600">Refund Payment</DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </td>
                   </tr>
-                ))}
-                {filteredSessions.length === 0 && (
+                ) : filteredSessions.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
                       No sessions found matching your search.
                     </td>
                   </tr>
+                ) : (
+                  filteredSessions.map((session) => (
+                    <tr key={session.originalId} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap font-medium">{session.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-foreground">{session.mentorName}</div>
+                        <div className="text-xs text-muted-foreground">{session.mentorCompany}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-foreground">
+                        {session.jobSeekerName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                          {session.date}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {session.time} ({session.duration}m)
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium flex items-center mb-1">
+                          <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+                          {session.amount}
+                        </div>
+                        <StatusBadge status={session.paymentStatus} className="text-[10px] px-1.5 py-0" />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={session.sessionStatus} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="flex items-center justify-center h-8 w-8 p-0 rounded-md hover:bg-muted hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                            <span className="sr-only">Open menu</span>
+                            <MoreVertical className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem>View Details</DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Video className="w-4 h-4 mr-2" /> Join Call
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {session.sessionStatus === "scheduled" && (
+                              <>
+                                <DropdownMenuItem>Reschedule Session</DropdownMenuItem>
+                                <DropdownMenuItem className="text-amber-600">Cancel Session</DropdownMenuItem>
+                              </>
+                            )}
+                            {session.paymentStatus === "success" && (
+                              <DropdownMenuItem className="text-red-600">Refund Payment</DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
