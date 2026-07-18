@@ -35,7 +35,8 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
       payment: true,
       sessionNotes: true,
       sessionSummary: true,
-      tasks: true
+      tasks: true,
+      rescheduleReq: true
     }
   });
 
@@ -67,6 +68,51 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
           {booking.status === "CANCELLED" && <Badge variant="destructive">Cancelled</Badge>}
         </div>
       </div>
+
+      {booking.rescheduleReq && (
+        <Card className={cn("mb-8 shadow-sm border", 
+          booking.rescheduleReq.status === "PENDING" ? "border-amber-200 bg-amber-50/50" : 
+          booking.rescheduleReq.status === "REJECTED" ? "border-red-200 bg-red-50/50" : 
+          "border-blue-200 bg-blue-50/50"
+        )}>
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertCircle className={cn("h-5 w-5 mt-0.5",
+              booking.rescheduleReq.status === "PENDING" ? "text-amber-600" :
+              booking.rescheduleReq.status === "REJECTED" ? "text-red-600" :
+              "text-blue-600"
+            )} />
+            <div>
+              <h3 className={cn("font-semibold",
+                booking.rescheduleReq.status === "PENDING" ? "text-amber-900" :
+                booking.rescheduleReq.status === "REJECTED" ? "text-red-900" :
+                "text-blue-900"
+              )}>
+                Reschedule Request {booking.rescheduleReq.status === "PENDING" ? "Pending Approval" : booking.rescheduleReq.status === "ACCEPTED" ? "Approved" : "Rejected"}
+              </h3>
+              <p className={cn("text-sm mt-1",
+                booking.rescheduleReq.status === "PENDING" ? "text-amber-700/90" :
+                booking.rescheduleReq.status === "REJECTED" ? "text-red-700/90" :
+                "text-blue-700/90"
+              )}>
+                {booking.rescheduleReq.status === "PENDING" 
+                  ? `You requested to reschedule this session to ${format(new Date(booking.rescheduleReq.requestedDate), 'MMM d, yyyy')} at ${new Date(booking.rescheduleReq.requestedTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}. Waiting for mentor approval.` 
+                  : booking.rescheduleReq.status === "ACCEPTED" 
+                  ? "Your reschedule request was approved. The new time is reflected below." 
+                  : "Your reschedule request was rejected by the mentor. The original time remains."}
+              </p>
+              {booking.rescheduleReq.reason && (
+                <p className={cn("text-sm mt-2 italic",
+                  booking.rescheduleReq.status === "PENDING" ? "text-amber-700/70" :
+                  booking.rescheduleReq.status === "REJECTED" ? "text-red-700/70" :
+                  "text-blue-700/70"
+                )}>
+                  Reason: "{booking.rescheduleReq.reason}"
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isCompleted && booking.sessionNotes && (
         <div className="mb-8">
