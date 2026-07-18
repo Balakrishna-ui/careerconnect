@@ -174,7 +174,7 @@ export async function getAdminMentors() {
           name: true,
           email: true,
           image: true,
-          phone: true,
+          mobile: true,
           createdAt: true
         }
       },
@@ -194,24 +194,28 @@ export async function getAdminMentors() {
     id: m.id,
     name: m.user.name || m.name || "Unknown",
     email: m.user.email || "",
-    mobile: m.user.phone || m.contactNumber || "N/A",
+    mobile: m.user.mobile || "N/A",
     company: m.company || "Independent",
-    designation: m.jobTitle || "Mentor",
-    category: m.category || "General",
+    designation: m.role || "Mentor",
+    category: m.industry || "General",
     verificationStatus: m.applicationStatus.toLowerCase(), // "pending", "verified", etc.
     accountStatus: "active", // Defaulting to active
     rating: m.rating || 0,
     sessionsCompleted: m.bookings.filter(b => b.status === "COMPLETED").length,
     earnings: m.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0) / 100, 0),
     joinedAt: m.user.createdAt.toLocaleDateString(),
-    image: m.user.image || m.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user.name || "M")}`,
+    image: m.user.image || m.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user.name || "M")}`,
     location: m.location || "Remote"
   }));
 }
 
 export async function getAdminJobSeekers() {
   const users = await prisma.user.findMany({
-    where: { role: "USER" },
+    where: { 
+      role: {
+        in: ["USER", "JOB_SEEKER"]
+      } 
+    },
     include: {
       bookings: {
         include: { payment: true }
@@ -223,7 +227,7 @@ export async function getAdminJobSeekers() {
     id: u.id,
     name: u.name || "Unknown",
     email: u.email || "",
-    mobile: u.phone || "N/A",
+    mobile: u.mobile || "N/A",
     sessionsBooked: u.bookings.length,
     totalSpend: u.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0) / 100, 0),
     accountStatus: "active",
