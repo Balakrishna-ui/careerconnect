@@ -12,7 +12,7 @@ export function Footer() {
   }
 
   return (
-    <footer className="border-t bg-muted/40 py-12 md:py-16">
+    <footer className="border-t bg-muted/40 py-12 md:py-16 print:hidden">
       <div className="container mx-auto px-4 flex flex-col items-center">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12 w-full max-w-5xl">
           <div className="col-span-1 flex flex-col items-center text-center md:items-start md:text-left">
