@@ -299,8 +299,12 @@ export async function createBooking(data: {
   serviceId: string;
   dateStr: string; // "YYYY-MM-DD"
   startTime: string; // "HH:mm"
+  goal?: string;
+  experience?: string;
+  message?: string;
+  resumeUrl?: string;
 }) {
-  const { mentorId, userId, serviceId, dateStr, startTime } = data;
+  const { mentorId, userId, serviceId, dateStr, startTime, goal, experience, message, resumeUrl } = data;
 
   // Get service
   const service = await prisma.sessionType.findUnique({
@@ -348,6 +352,10 @@ export async function createBooking(data: {
       endTime: bookingEnd,
       status: "AWAITING_PAYMENT",
       price: service.price,
+      goal,
+      experience,
+      message,
+      resumeUrl,
     },
   });
 
@@ -404,8 +412,7 @@ export async function confirmBooking(data: {
   const booking = await prisma.booking.update({
     where: { id: bookingId },
     data: {
-      status: "CONFIRMED",
-      meetingLink,
+      status: "PENDING", // PENDING Mentor Approval
     },
     include: {
       mentor: true,
@@ -434,7 +441,7 @@ export async function confirmBooking(data: {
       userId: booking.userId,
       mentorId: booking.mentorId,
       type: "EMAIL",
-      message: `Your session with ${booking.mentor.name} has been confirmed for ${format(new Date(booking.startTime), "PPP 'at' p")}.`,
+      message: `Your booking request with ${booking.mentor.name} has been sent and is awaiting approval.`,
       status: "SENT",
     },
   });
@@ -442,8 +449,70 @@ export async function confirmBooking(data: {
   return {
     success: true,
     booking: JSON.parse(JSON.stringify(booking)),
-    meetingLink,
+    meetingLink: "Pending Mentor Approval",
   };
+}
+
+// ─── Mentor Lifecycle Actions ────────────────────────────────────────────────
+
+export async function acceptBooking(bookingId: string, meetingLink: string, meetingInstructions?: string) {
+  const booking = await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      status: "CONFIRMED",
+      meetingLink,
+      meetingInstructions,
+    },
+    include: { user: true, mentor: true }
+  });
+
+  await prisma.notification.create({
+    data: {
+      bookingId,
+      userId: booking.userId,
+      type: "BOOKING_ACCEPTED",
+      message: `🎉 Your booking with ${booking.mentor.name} has been accepted!`,
+    },
+  });
+
+  return { success: true };
+}
+
+export async function rejectBooking(bookingId: string) {
+  const booking = await prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "REJECTED" },
+    include: { user: true, mentor: true }
+  });
+
+  await prisma.notification.create({
+    data: {
+      bookingId,
+      userId: booking.userId,
+      type: "BOOKING_REJECTED",
+      message: `Your booking request with ${booking.mentor.name} was declined.`,
+    },
+  });
+
+  // Handle Refund Logic in the future
+
+  return { success: true };
+}
+
+export async function completeSession(bookingId: string, notes: { performance: number, communication: number, problemSolving: number, weakness: string, strength: string, recommendation: string }) {
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "COMPLETED" },
+  });
+
+  await prisma.sessionNote.create({
+    data: {
+      bookingId,
+      ...notes,
+    }
+  });
+
+  return { success: true };
 }
 
 // ─── Cancel Booking ──────────────────────────────────────────────────────────
@@ -529,4 +598,65 @@ export async function createPendingBooking(data: { mentorId: string; date: strin
   });
 
   return { success: true, bookingId: booking.id };
+}
+
+// ─── AI Roadmap Generation (USP) ─────────────────────────────────────────────
+
+export async function generateSessionSummary(bookingId: string) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { sessionNotes: true }
+  });
+
+  if (!booking || !booking.sessionNotes) {
+    return { success: false, error: "Session notes not found." };
+  }
+
+  const { weakness, strength, recommendation } = booking.sessionNotes;
+
+  // In a real application, we would call OpenAI/Gemini here to generate a detailed roadmap based on the mentor's notes.
+  // For the purpose of this implementation, we will simulate the AI output.
+
+  // 1. Create Session Summary
+  const summary = await prisma.sessionSummary.create({
+    data: {
+      bookingId,
+      discussionTopics: "Career Growth, Interview Preparation, Resume Review",
+      interviewTips: "1. Structure your answers using the STAR method.\n2. Emphasize your impact with numbers.\n3. Keep your introduction under 2 minutes.",
+      missingSkills: weakness || "System Design, Advanced SQL, Stakeholder Management",
+      projectsToBuild: "1. Build an end-to-end data pipeline using Apache Airflow.\n2. Create a full-stack dashboard for realtime metrics.",
+      roadmap: "Month 1: Focus on core algorithms and data structures.\nMonth 2: Build 2 advanced portfolio projects.\nMonth 3: Mock interviews and application blitz."
+    }
+  });
+
+  // 2. Create Follow-up Tasks (MentorTasks)
+  const task1 = await prisma.mentorTask.create({
+    data: {
+      bookingId,
+      title: "Revise Resume according to mentor's notes",
+      deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
+    }
+  });
+
+  const task2 = await prisma.mentorTask.create({
+    data: {
+      bookingId,
+      title: "Complete the System Design primer",
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    }
+  });
+  
+  const task3 = await prisma.mentorTask.create({
+    data: {
+      bookingId,
+      title: "Schedule next follow-up session",
+      deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 days
+    }
+  });
+
+  return { 
+    success: true, 
+    summary: JSON.parse(JSON.stringify(summary)), 
+    tasks: JSON.parse(JSON.stringify([task1, task2, task3])) 
+  };
 }

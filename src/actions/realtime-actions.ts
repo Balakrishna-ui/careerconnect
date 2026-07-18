@@ -72,7 +72,7 @@ export async function getMentorDashboardRealtime(mentorUserId: string) {
   }));
 
   const nextSessionTime = todaysSessions.length > 0 
-    ? todaysSessions[0].startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+    ? todaysSessions[0].startTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })
     : null;
 
   return {

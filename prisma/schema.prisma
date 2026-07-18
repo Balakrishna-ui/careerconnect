@@ -232,22 +232,73 @@ model BlockedDate {
 }
 
 model Booking {
-  id            String         @id @default(cuid())
-  userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mentorId      String
-  mentor        Mentor         @relation(fields: [mentorId], references: [id], onDelete: Cascade)
-  date          DateTime
-  startTime     DateTime
-  endTime       DateTime
-  status        String         @default("PENDING")
-  price         Int
-  meetingLink   String?
-  payment       Payment?
-  rescheduleReq RescheduleRequest?
-  notifications Notification[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                  String             @id @default(cuid())
+  userId              String
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mentorId            String
+  mentor              Mentor             @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  date                DateTime
+  startTime           DateTime
+  endTime             DateTime
+  status              String             @default("PENDING")
+  price               Int
+  meetingLink         String?
+  
+  // Additional Details
+  goal                String?
+  experience          String?
+  message             String?            @db.Text
+  resumeUrl           String?
+  meetingInstructions String?            @db.Text
+
+  // Relations
+  payment             Payment?
+  rescheduleReq       RescheduleRequest?
+  notifications       Notification[]
+  sessionNotes        SessionNote?
+  sessionSummary      SessionSummary?
+  tasks               MentorTask[]
+  
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model SessionNote {
+  id             String   @id @default(cuid())
+  bookingId      String   @unique
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  performance    Int?     // 1 to 5
+  communication  Int?
+  problemSolving Int?
+  weakness       String?  @db.Text
+  strength       String?  @db.Text
+  recommendation String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SessionSummary {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  discussionTopics String?  @db.Text
+  interviewTips    String?  @db.Text
+  missingSkills    String?  // comma separated
+  projectsToBuild  String?  @db.Text
+  roadmap          String?  @db.Text // JSON or structured text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model MentorTask {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  title       String
+  deadline    DateTime?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model RescheduleRequest {

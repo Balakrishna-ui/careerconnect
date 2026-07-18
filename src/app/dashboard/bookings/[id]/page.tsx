@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { CareerRoadmap } from "@/components/dashboard/CareerRoadmap";
 
 export default async function BookingDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -31,7 +32,10 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
           user: true
         }
       },
-      payment: true
+      payment: true,
+      sessionNotes: true,
+      sessionSummary: true,
+      tasks: true
     }
   });
 
@@ -64,6 +68,17 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
         </div>
       </div>
 
+      {isCompleted && booking.sessionNotes && (
+        <div className="mb-8">
+          <CareerRoadmap 
+            bookingId={booking.id}
+            sessionNotes={booking.sessionNotes}
+            sessionSummary={booking.sessionSummary}
+            tasks={booking.tasks}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <Card className="shadow-sm">
@@ -94,7 +109,7 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="h-4 w-4 text-primary" />
-                      <span className="font-medium">{format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}</span>
+                      <span className="font-medium">{new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })} - {new Date(booking.endTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                     </div>
                   </div>
                 </div>

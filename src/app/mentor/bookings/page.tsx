@@ -85,7 +85,7 @@ export default async function MentorBookingsPage() {
                       </div>
                       <div className="flex items-center text-xs text-muted-foreground gap-2 mt-1">
                         <Clock className="w-3.5 h-3.5" />
-                        {booking.startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {booking.startTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: true })}
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(booking.status)}</TableCell>

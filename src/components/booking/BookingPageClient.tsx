@@ -20,6 +20,7 @@ import {
   Copy,
   ExternalLink,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,7 @@ const STEPS = [
   { label: "Select Service", icon: Star },
   { label: "Select Date", icon: Calendar },
   { label: "Select Time", icon: Clock },
+  { label: "Details", icon: FileText },
   { label: "Payment", icon: CreditCard },
   { label: "Confirmed", icon: CheckCircle2 },
 ];
@@ -367,6 +369,12 @@ export default function BookingPageClient({
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  
+  // Details
+  const [goal, setGoal] = useState("");
+  const [experience, setExperience] = useState("");
+  const [message, setMessage] = useState("");
+  const [resumeUrl, setResumeUrl] = useState("");
 
   const selectedService = mentor?.services?.find(s => s.id === selectedServiceId);
 
@@ -450,7 +458,7 @@ export default function BookingPageClient({
     return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
   };
 
-  const handleProceedToPayment = () => {
+  const handleProceedToDetails = () => {
     if (selectedDate && selectedSlot) {
       if (status === "unauthenticated") {
         setShowLoginModal(true);
@@ -473,6 +481,10 @@ export default function BookingPageClient({
         serviceId: selectedServiceId,
         dateStr: selectedDate,
         startTime: selectedSlot,
+        goal,
+        experience,
+        message,
+        resumeUrl,
       });
 
       if (!result.success) {
@@ -502,7 +514,7 @@ export default function BookingPageClient({
             date: selectedDate,
             time: selectedSlot,
           });
-          setStep(4);
+          setStep(5);
         } else {
           const verifyData = await verifyRes.json();
           alert("Test Payment verification failed: " + verifyData.error);
@@ -556,7 +568,7 @@ export default function BookingPageClient({
                 date: selectedDate,
                 time: selectedSlot,
               });
-              setStep(4);
+              setStep(5);
             } else {
               const verifyData = await verifyRes.json();
               alert("Payment verification failed: " + verifyData.error);
@@ -761,9 +773,9 @@ export default function BookingPageClient({
                             <Button
                               size="lg"
                               className="w-full h-14 text-base font-semibold shadow-md rounded-xl"
-                              onClick={handleProceedToPayment}
+                              onClick={handleProceedToDetails}
                             >
-                              Continue to Payment
+                              Continue to Details
                               <ChevronRight className="w-4 h-4 ml-2" />
                             </Button>
                           </div>
@@ -773,8 +785,88 @@ export default function BookingPageClient({
                   </div>
                 )}
 
-                {/* Step 3: Payment Confirmation */}
+                {/* Step 3: Additional Details */}
                 {step === 3 && selectedDate && selectedSlot && selectedService && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <h2 className="text-xl font-bold mb-1">Session Details</h2>
+                      <Button variant="ghost" size="sm" onClick={() => setStep(2)} className="text-xs">
+                        <ChevronLeft className="w-3 h-3 mr-1" /> Back
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Help your mentor prepare by sharing what you want to discuss
+                    </p>
+
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold">Primary Goal</label>
+                        <input 
+                          type="text" 
+                          value={goal}
+                          onChange={(e) => setGoal(e.target.value)}
+                          placeholder="e.g., Need Data Analyst Job, Resume Review, Mock Interview" 
+                          className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold">Experience Level</label>
+                        <select 
+                          value={experience}
+                          onChange={(e) => setExperience(e.target.value)}
+                          className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <option value="">Select your experience level</option>
+                          <option value="Fresher">Fresher (0 years)</option>
+                          <option value="Junior">Junior (1-3 years)</option>
+                          <option value="Mid-Level">Mid-Level (3-5 years)</option>
+                          <option value="Senior">Senior (5+ years)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold">Message for Mentor</label>
+                        <textarea 
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value)}
+                          placeholder="I need interview preparation for a Data Analyst role..." 
+                          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[100px]"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold">Resume URL (Optional)</label>
+                        <input 
+                          type="url" 
+                          value={resumeUrl}
+                          onChange={(e) => setResumeUrl(e.target.value)}
+                          placeholder="https://drive.google.com/..." 
+                          className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                        <p className="text-xs text-muted-foreground">Link to your resume on Google Drive, Dropbox, etc. Make sure it is public.</p>
+                      </div>
+
+                      <Button
+                        size="lg"
+                        className="w-full h-14 text-base font-semibold shadow-md rounded-xl mt-6"
+                        onClick={() => {
+                          if (!goal || !experience) {
+                            alert("Please fill in your primary goal and experience level.");
+                            return;
+                          }
+                          setStep(4);
+                        }}
+                      >
+                        Continue to Payment
+                        <ChevronRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 4: Payment Confirmation */}
+                {step === 4 && selectedDate && selectedSlot && selectedService && (
                   <div>
                     <h2 className="text-xl font-bold mb-1">
                       Confirm & Pay
@@ -866,7 +958,7 @@ export default function BookingPageClient({
                       <Button
                         variant="ghost"
                         className="w-full"
-                        onClick={() => setStep(2)}
+                        onClick={() => setStep(3)}
                         disabled={isProcessing}
                       >
                         <ChevronLeft className="w-4 h-4 mr-1" /> Go Back
@@ -880,8 +972,8 @@ export default function BookingPageClient({
                   </div>
                 )}
 
-                {/* Step 4: Success */}
-                {step === 4 && bookingResult && (
+                {/* Step 5: Success */}
+                {step === 5 && bookingResult && (
                   <div className="text-center py-4">
                     <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
                       <PartyPopper className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
@@ -1010,7 +1102,7 @@ export default function BookingPageClient({
           </div>
 
           {/* ── Sidebar ── */}
-          {step < 3 && (
+          {step < 4 && (
             <div className="w-full lg:w-[320px] shrink-0">
               <div className="sticky top-32">
                 <Card className="border-none shadow-xl shadow-primary/5 rounded-2xl overflow-hidden">

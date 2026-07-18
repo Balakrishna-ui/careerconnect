@@ -71,7 +71,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             <td className="py-4">
               <p className="font-semibold">1:1 Mentorship Session with {booking.mentor.name}</p>
               <p className="text-sm text-gray-500">
-                {format(new Date(booking.date), 'MMMM d, yyyy')} | {format(new Date(booking.startTime), 'h:mm a')}
+                {format(new Date(booking.date), 'MMMM d, yyyy')} | {new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}
               </p>
             </td>
             <td className="py-4 text-right">

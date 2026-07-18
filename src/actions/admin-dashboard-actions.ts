@@ -209,7 +209,7 @@ export async function getRecentAdminSessions() {
     jobSeekerName: s.user.name,
     mentorName: s.mentor.name,
     date: s.date.toLocaleDateString(),
-    time: s.startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    time: s.startTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: true }),
     duration: Math.round((s.endTime.getTime() - s.startTime.getTime()) / 60000),
     amount: s.price,
     sessionStatus: s.status,

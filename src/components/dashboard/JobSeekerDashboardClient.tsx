@@ -178,7 +178,7 @@ export function JobSeekerDashboardClient({
                               </span>
                               <span className="flex items-center text-foreground/80">
                                 <Clock className="h-3.5 w-3.5 mr-1" />
-                                {format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}
+                                {new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })} - {new Date(booking.endTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}
                               </span>
                               <span className="flex items-center text-foreground/80">
                                 <Video className="h-3.5 w-3.5 mr-1" />
@@ -272,7 +272,7 @@ export function JobSeekerDashboardClient({
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">{format(new Date(booking.date), 'MMM d, yyyy')}</div>
-                            <div className="text-xs text-muted-foreground">{format(new Date(booking.startTime), 'h:mm a')}</div>
+                            <div className="text-xs text-muted-foreground">{new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}</div>
                           </TableCell>
                           <TableCell>₹{amount}</TableCell>
                           <TableCell>

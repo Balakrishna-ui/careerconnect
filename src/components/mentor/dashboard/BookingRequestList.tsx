@@ -19,6 +19,7 @@ import { Loader2, Link as LinkIcon, Check, X } from "lucide-react";
 export function BookingRequestList({ bookings }: { bookings: any[] }) {
   const [activeAction, setActiveAction] = useState<{ id: string, type: "ACCEPT" | "REJECT", name: string } | null>(null);
   const [meetingLink, setMeetingLink] = useState("");
+  const [meetingInstructions, setMeetingInstructions] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAction = async () => {
@@ -32,7 +33,7 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
         setIsLoading(false);
         return;
       }
-      res = await acceptBooking(activeAction.id, meetingLink);
+      res = await acceptBooking(activeAction.id, meetingLink, meetingInstructions);
     } else {
       res = await rejectBooking(activeAction.id);
     }
@@ -42,6 +43,7 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
     if (res.success) {
       setActiveAction(null);
       setMeetingLink("");
+      setMeetingInstructions("");
     } else {
       alert(res.error || `Failed to ${activeAction.type.toLowerCase()} booking`);
     }
@@ -61,9 +63,13 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
           patientImage={booking.user.image}
           serviceTitle="1:1 Mentorship Session"
           dateStr={booking.date.toLocaleDateString()}
-          timeStr={booking.startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+          timeStr={booking.startTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })}
           duration={Math.round((booking.endTime.getTime() - booking.startTime.getTime()) / 60000)}
           price={booking.price}
+          goal={booking.goal}
+          experience={booking.experience}
+          message={booking.message}
+          resumeUrl={booking.resumeUrl}
           onAccept={(id) => setActiveAction({ id, type: "ACCEPT", name: booking.user.name })}
           onReject={(id) => setActiveAction({ id, type: "REJECT", name: booking.user.name })}
           isPending={isLoading && activeAction?.id === booking.id}
@@ -93,6 +99,15 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
                   disabled={isLoading}
                 />
               </div>
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="instructions">Pre-session Instructions (Optional)</Label>
+              <Input
+                id="instructions"
+                placeholder="Please review these notes before we meet..."
+                value={meetingInstructions}
+                onChange={(e) => setMeetingInstructions(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
           </div>
           <DialogFooter>

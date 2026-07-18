@@ -1,6 +1,7 @@
 "use client";
 
-import { Calendar, Clock } from "lucide-react";
+import { useState } from "react";
+import { Calendar, Clock, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
@@ -16,6 +17,10 @@ interface BookingRequestCardProps {
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
   isPending?: boolean;
+  goal?: string | null;
+  experience?: string | null;
+  message?: string | null;
+  resumeUrl?: string | null;
 }
 
 export function BookingRequestCard({
@@ -29,67 +34,113 @@ export function BookingRequestCard({
   price,
   onAccept,
   onReject,
-  isPending
+  isPending,
+  goal,
+  experience,
+  message,
+  resumeUrl
 }: BookingRequestCardProps) {
+  const [showDetails, setShowDetails] = useState(false);
+
   return (
-    <div className="flex flex-col md:flex-row gap-5 p-5 bg-card border border-border shadow-sm rounded-2xl hover:shadow-md transition-shadow relative overflow-hidden group">
-      <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
+    <div className="flex flex-col gap-0 bg-card border border-border shadow-sm rounded-2xl hover:shadow-md transition-shadow relative overflow-hidden group">
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500 z-10" />
       
-      {/* Mentor Profile / Info */}
-      <div className="flex gap-4 items-center md:items-start md:w-1/3">
-        <div className="h-14 w-14 rounded-full overflow-hidden bg-muted border shrink-0 relative flex items-center justify-center text-lg font-bold text-muted-foreground shadow-sm">
-          {patientImage ? (
-            <Image src={patientImage} alt={patientName} fill className="object-cover" />
-          ) : (
-            patientName.substring(0, 2).toUpperCase()
-          )}
+      <div className="flex flex-col md:flex-row gap-5 p-5 relative z-0">
+        {/* Mentor Profile / Info */}
+        <div className="flex gap-4 items-center md:items-start md:w-1/3">
+          <div className="h-14 w-14 rounded-full overflow-hidden bg-muted border shrink-0 relative flex items-center justify-center text-lg font-bold text-muted-foreground shadow-sm">
+            {patientImage ? (
+              <Image src={patientImage} alt={patientName} fill className="object-cover" />
+            ) : (
+              patientName.substring(0, 2).toUpperCase()
+            )}
+          </div>
+          <div>
+            <h4 className="font-bold text-lg leading-tight">{patientName}</h4>
+            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1 font-medium">
+              <span className="truncate">{serviceTitle}</span>
+            </p>
+          </div>
         </div>
-        <div>
-          <h4 className="font-bold text-lg leading-tight">{patientName}</h4>
-          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1 font-medium">
-            <span className="truncate">{serviceTitle}</span>
-          </p>
+
+        {/* Date & Time Grid */}
+        <div className="grid grid-cols-2 gap-4 md:w-1/3 border-t md:border-t-0 md:border-l border-border pt-4 md:pt-0 md:pl-5">
+          <div>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-0.5">Requested Time</span>
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-primary" />
+              {dateStr}
+            </div>
+            <div className="text-sm text-muted-foreground ml-5">{timeStr}</div>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-0.5">Details</span>
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-primary" />
+              {duration} Mins
+            </div>
+            <div className="text-sm text-emerald-600 dark:text-emerald-400 font-bold ml-5">₹{price}</div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 md:w-1/3 md:justify-end border-t md:border-t-0 border-border pt-4 md:pt-0">
+          <Button
+            variant="ghost"
+            className="w-full md:w-auto rounded-xl"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            Details
+            {showDetails ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+          </Button>
+          <Button 
+            variant="outline" 
+            className="w-full md:w-auto rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+            onClick={() => onReject(id)}
+            disabled={isPending}
+          >
+            Reject
+          </Button>
+          <Button 
+            className="w-full md:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+            onClick={() => onAccept(id)}
+            disabled={isPending}
+          >
+            Accept
+          </Button>
         </div>
       </div>
 
-      {/* Date & Time Grid */}
-      <div className="grid grid-cols-2 gap-4 md:w-1/3 border-t md:border-t-0 md:border-l border-border pt-4 md:pt-0 md:pl-5">
-        <div>
-          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-0.5">Requested Time</span>
-          <div className="font-semibold text-foreground flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-primary" />
-            {dateStr}
+      {/* Expanded Details */}
+      {showDetails && (
+        <div className="border-t border-border bg-muted/20 p-5 pt-4 text-sm">
+          <h5 className="font-semibold mb-3">Booking Details</h5>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider block mb-1">Primary Goal</span>
+              <p className="font-medium">{goal || "Not specified"}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider block mb-1">Experience Level</span>
+              <p className="font-medium">{experience || "Not specified"}</p>
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider block mb-1">Message for Mentor</span>
+              <p className="bg-background border rounded-lg p-3 text-muted-foreground italic whitespace-pre-wrap">
+                {message || "No message provided."}
+              </p>
+            </div>
+            {resumeUrl && (
+              <div className="md:col-span-2">
+                <a href={resumeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-primary hover:underline font-semibold">
+                  <LinkIcon className="w-4 h-4" /> View Resume
+                </a>
+              </div>
+            )}
           </div>
-          <div className="text-sm text-muted-foreground ml-5">{timeStr}</div>
         </div>
-        <div>
-          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-0.5">Details</span>
-          <div className="font-semibold text-foreground flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-primary" />
-            {duration} Mins
-          </div>
-          <div className="text-sm text-emerald-600 dark:text-emerald-400 font-bold ml-5">₹{price}</div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 md:w-1/3 md:justify-end border-t md:border-t-0 border-border pt-4 md:pt-0">
-        <Button 
-          variant="outline" 
-          className="w-full md:w-auto rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-          onClick={() => onReject(id)}
-          disabled={isPending}
-        >
-          Reject
-        </Button>
-        <Button 
-          className="w-full md:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-          onClick={() => onAccept(id)}
-          disabled={isPending}
-        >
-          Accept
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

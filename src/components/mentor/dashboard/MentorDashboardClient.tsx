@@ -8,9 +8,11 @@ import { EarningsOverview } from "@/components/mentor/dashboard/EarningsOverview
 import { NotificationsPanel } from "@/components/mentor/dashboard/NotificationsPanel";
 import { PremiumCalendarView } from "@/components/mentor/dashboard/PremiumCalendarView";
 import { AIAssistantCard } from "@/components/mentor/dashboard/AIAssistantCard";
+import { CompleteSessionModal } from "@/components/mentor/dashboard/CompleteSessionModal";
 import useSWR from "swr";
 import { getMentorDashboardRealtime } from "@/actions/realtime-actions";
 import { Loader2 } from "lucide-react";
+import { useState } from "react";
 
 export function MentorDashboardClient({
   mentorUserId,
@@ -21,7 +23,9 @@ export function MentorDashboardClient({
   mentorName: string;
   initialData: any;
 }) {
-  const { data } = useSWR(
+  const [sessionToComplete, setSessionToComplete] = useState<{id: string, name: string} | null>(null);
+
+  const { data, mutate } = useSWR(
     `mentor-dashboard-${mentorUserId}`,
     () => getMentorDashboardRealtime(mentorUserId),
     {
@@ -50,7 +54,7 @@ export function MentorDashboardClient({
     return {
       id: b.id,
       day: dayName,
-      time: new Date(b.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      time: new Date(b.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true }),
       title: "1:1 Mentorship",
       patientName: b.user.name
     };
@@ -124,9 +128,10 @@ export function MentorDashboardClient({
                     id={session.id}
                     patientName={session.user.name}
                     serviceTitle="1:1 Mentorship Session"
-                    timeStr={new Date(session.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    timeStr={new Date(session.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })}
                     meetingLink={session.meetingLink}
                     status={session.status}
+                    onMarkCompleted={(id) => setSessionToComplete({ id, name: session.user.name })}
                   />
                 ))}
               </div>
@@ -169,6 +174,16 @@ export function MentorDashboardClient({
         </div>
         
       </div>
+
+      <CompleteSessionModal 
+        isOpen={!!sessionToComplete}
+        onClose={() => setSessionToComplete(null)}
+        bookingId={sessionToComplete?.id || null}
+        patientName={sessionToComplete?.name || ""}
+        onSuccess={() => {
+          mutate(); // refresh dashboard data
+        }}
+      />
     </div>
   );
 }
