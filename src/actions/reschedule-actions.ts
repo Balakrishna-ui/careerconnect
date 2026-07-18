@@ -119,7 +119,7 @@ export async function acceptRescheduleRequest(requestId: string) {
       },
     });
 
-    if (!request || request.mentorId !== session.user.id) {
+    if (!request || request.booking.mentor.userId !== session.user.id) {
       return { success: false, error: "Request not found or unauthorized" };
     }
 
@@ -181,7 +181,7 @@ export async function rejectRescheduleRequest(requestId: string) {
       },
     });
 
-    if (!request || request.mentorId !== session.user.id) {
+    if (!request || request.booking.mentor.userId !== session.user.id) {
       return { success: false, error: "Request not found or unauthorized" };
     }
 
