@@ -23,7 +23,7 @@ export function Navbar() {
   const { data: session, status } = useSession();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  if (pathname?.startsWith("/admin") || pathname?.endsWith("/invoice")) {
+  if (pathname?.startsWith("/admin") || pathname?.includes("/invoice")) {
     return null;
   }
 
