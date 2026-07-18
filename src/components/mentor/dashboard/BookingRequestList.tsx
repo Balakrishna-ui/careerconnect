@@ -99,6 +99,7 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
                   disabled={isLoading}
                 />
               </div>
+            </div>
             <div className="space-y-2 mt-4">
               <Label htmlFor="instructions">Pre-session Instructions (Optional)</Label>
               <Input

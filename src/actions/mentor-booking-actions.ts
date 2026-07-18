@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-export async function acceptBooking(bookingId: string, meetingLink: string) {
+export async function acceptBooking(bookingId: string, meetingLink: string, meetingInstructions?: string) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user || session.user.role !== "MENTOR") {
@@ -31,6 +31,7 @@ export async function acceptBooking(bookingId: string, meetingLink: string) {
       data: {
         status: "CONFIRMED",
         meetingLink: meetingLink,
+        meetingInstructions: meetingInstructions || null,
       },
     });
     
