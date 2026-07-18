@@ -26,12 +26,14 @@ export function JobSeekerDashboardClient({
   userId,
   firstName,
   initialData,
-  needsReviewBookings
+  needsReviewBookings,
+  isPremium,
 }: {
   userId: string;
   firstName: string;
   initialData: any;
   needsReviewBookings: any[];
+  isPremium?: boolean;
 }) {
   const { data } = useSWR(
     `jobseeker-dashboard-${userId}`,
@@ -49,6 +51,9 @@ export function JobSeekerDashboardClient({
     upcomingBookings,
     pastBookings,
     allBookings,
+    profileCompletion,
+    nextStep,
+    recommendedMentors = []
   } = data || initialData;
 
   const now = new Date();
@@ -57,7 +62,10 @@ export function JobSeekerDashboardClient({
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Welcome back, {firstName}</h1>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            Welcome back, {firstName} 
+            {isPremium && <Badge className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-0 shadow-sm"><Star className="w-3 h-3 mr-1 fill-current"/> PRO</Badge>}
+          </h1>
           <p className="text-muted-foreground">Manage your upcoming sessions and career progress.</p>
         </div>
         {!data && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
@@ -98,12 +106,19 @@ export function JobSeekerDashboardClient({
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4 mb-2">
-              <Progress value={65} className="h-2" />
-              <span className="text-sm font-medium">65%</span>
+              <Progress value={profileCompletion || 0} className="h-2" />
+              <span className="text-sm font-medium">{profileCompletion || 0}%</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Next step: <Link href="/profile" className="text-primary hover:underline font-medium">Add your resume</Link>
-            </p>
+            {profileCompletion < 100 && nextStep && (
+              <p className="text-sm text-muted-foreground mb-4">
+                Next step: <Link href="/profile" className="text-primary hover:underline font-medium">{nextStep}</Link>
+              </p>
+            )}
+            {profileCompletion === 100 && (
+               <p className="text-sm text-emerald-600 font-medium mb-4">
+                 Your profile is 100% complete!
+               </p>
+            )}
           </CardContent>
         </Card>
         
@@ -117,6 +132,9 @@ export function JobSeekerDashboardClient({
             </Link>
             <Link href="/dashboard/bookmarks" className={cn(buttonVariants({ variant: "outline" }), "w-full justify-start")}>
               <BookmarkIcon className="h-4 w-4 mr-2" /> Saved Mentors
+            </Link>
+            <Link href="/pricing" className={cn(buttonVariants({ variant: isPremium ? "outline" : "default" }), "w-full justify-start font-bold", isPremium ? "text-blue-600 border-blue-200" : "bg-blue-600 hover:bg-blue-700")}>
+              <Star className={cn("h-4 w-4 mr-2", isPremium ? "fill-blue-600" : "")} /> {isPremium ? "Manage Subscription" : "Upgrade to Pro"}
             </Link>
           </CardContent>
         </Card>
@@ -225,6 +243,60 @@ export function JobSeekerDashboardClient({
             )}
           </section>
 
+          <section className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold tracking-tight">Recommended Mentors</h2>
+              <Link href="/mentors" className="text-sm text-primary hover:underline flex items-center">
+                Explore all <ArrowRight className="h-4 w-4 ml-1" />
+              </Link>
+            </div>
+            
+            {recommendedMentors.length === 0 ? (
+              <Card className="shadow-sm border-border/50 bg-muted/20">
+                <CardContent className="p-8 text-center flex flex-col items-center justify-center">
+                   <Star className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
+                   <p className="text-muted-foreground font-medium">No recommendations yet.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
+                {recommendedMentors.map((mentor: any) => (
+                  <Card key={mentor.id} className="min-w-[260px] max-w-[260px] snap-center shrink-0 border-border/50 hover:shadow-md transition-shadow">
+                    <div className="h-24 bg-muted w-full relative">
+                       {mentor.coverImage ? (
+                         <Image src={mentor.coverImage} alt="Cover" fill className="object-cover" />
+                       ) : (
+                         <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-indigo-100" />
+                       )}
+                    </div>
+                    <CardContent className="p-4 pt-0 relative">
+                       <div className="h-16 w-16 rounded-full border-4 border-background bg-muted absolute -top-8 overflow-hidden flex items-center justify-center font-bold">
+                         {mentor.image ? (
+                           <Image src={mentor.image} alt={mentor.name} fill className="object-cover" />
+                         ) : (
+                           mentor.name.substring(0, 2).toUpperCase()
+                         )}
+                       </div>
+                       <div className="mt-10">
+                         <h3 className="font-bold text-base truncate">{mentor.name}</h3>
+                         <p className="text-xs text-muted-foreground truncate">{mentor.role} {mentor.company && `at ${mentor.company}`}</p>
+                         <div className="flex items-center gap-1 mt-2 text-xs font-medium text-amber-500">
+                           <Star className="h-3.5 w-3.5 fill-amber-500" />
+                           {mentor.rating.toFixed(1)} ({mentor.reviewsCount})
+                         </div>
+                       </div>
+                    </CardContent>
+                    <div className="px-4 pb-4">
+                      <Link href={`/mentors/${mentor.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-xs")}>
+                        View Profile
+                      </Link>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold tracking-tight">Past Sessions</h2>
@@ -246,8 +318,11 @@ export function JobSeekerDashboardClient({
                 <TableBody>
                   {pastBookings.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No past sessions found.
+                      <TableCell colSpan={5} className="h-32 text-center">
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          <History className="h-8 w-8 mb-2 opacity-50" />
+                          <p>No past sessions found.</p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -359,7 +434,11 @@ export function JobSeekerDashboardClient({
                   </div>
                 ))}
                 {allBookings.length === 0 && (
-                  <div className="text-center text-sm text-muted-foreground py-4 relative z-10 bg-background">No recent activity</div>
+                  <div className="text-center flex flex-col items-center justify-center py-8 relative z-10 bg-background border rounded-lg border-dashed">
+                    <History className="h-8 w-8 text-muted-foreground/50 mb-3" />
+                    <p className="text-sm font-medium">No recent activity</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Book a session with a mentor to get started.</p>
+                  </div>
                 )}
               </div>
             </CardContent>

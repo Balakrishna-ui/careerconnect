@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { BookingStateMachine } from "@/lib/booking-state";
 
 export async function acceptBooking(bookingId: string, meetingLink: string, meetingInstructions?: string) {
   try {
@@ -21,16 +22,21 @@ export async function acceptBooking(bookingId: string, meetingLink: string, meet
       return { success: false, error: "Booking not found or unauthorized" };
     }
 
-    if (booking.status !== "PENDING") {
-      return { success: false, error: "Only pending bookings can be accepted" };
+    try {
+      BookingStateMachine.validateTransition(booking.status, "CONFIRMED");
+    } catch (e: any) {
+      return { success: false, error: e.message };
     }
+
+    // Generate an automatic Google Meet link if none provided
+    const finalMeetingLink = meetingLink || `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
 
     // Update booking status and meeting link
     await prisma.booking.update({
       where: { id: bookingId },
       data: {
         status: "CONFIRMED",
-        meetingLink: meetingLink,
+        meetingLink: finalMeetingLink,
         meetingInstructions: meetingInstructions || null,
       },
     });
@@ -80,8 +86,10 @@ export async function rejectBooking(bookingId: string, reason?: string) {
       return { success: false, error: "Booking not found or unauthorized" };
     }
 
-    if (booking.status !== "PENDING") {
-      return { success: false, error: "Only pending bookings can be rejected" };
+    try {
+      BookingStateMachine.validateTransition(booking.status, "REJECTED");
+    } catch (e: any) {
+      return { success: false, error: e.message };
     }
 
     // Update booking status

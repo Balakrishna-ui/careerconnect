@@ -8,6 +8,7 @@ import { BriefcaseBusiness, Menu, LogOut, User, X } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "next-auth/react";
 import { JobSeekerAccountDrawer } from "@/components/layout/JobSeekerAccountDrawer";
+import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +70,7 @@ export function Navbar() {
               <div className="h-8 w-8 animate-pulse rounded-full bg-muted"></div>
             ) : session ? (
               <>
+                <NotificationDropdown />
                 {session.user?.role === "JOB_SEEKER" ? (
                   <JobSeekerAccountDrawer session={session} />
                 ) : (

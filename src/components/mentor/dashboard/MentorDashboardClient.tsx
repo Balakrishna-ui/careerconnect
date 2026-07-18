@@ -41,7 +41,8 @@ export function MentorDashboardClient({
     pendingReschedules,
     earnings,
     notifications,
-    nextSessionTime
+    nextSessionTime,
+    vacationMode
   } = data || initialData;
 
   const today = new Date();
@@ -62,12 +63,23 @@ export function MentorDashboardClient({
 
   return (
     <div className="space-y-6 pb-12">
+      {vacationMode && (
+        <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-800 p-4 rounded-r-xl shadow-sm flex items-center justify-between">
+          <div>
+            <p className="font-bold">Vacation Mode is Active 🌴</p>
+            <p className="text-sm">You are currently hidden from search results and mentee bookings are paused. Enjoy your break!</p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <HeroHeader 
           mentorName={mentorName || "Mentor"}
           newBookingCount={pendingBookings?.length || 0}
           rescheduleCount={pendingReschedules?.length || 0}
           todaySessionsCount={todaysSessions?.length || 0}
+          vacationMode={vacationMode}
+          mentorUserId={mentorUserId}
+          onMutate={() => mutate()}
         />
         {!data && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mr-4" />}
       </div>

@@ -331,12 +331,14 @@ model Payment {
 
 model Notification {
   id        String   @id @default(cuid())
-  bookingId String
-  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String?
+  booking   Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   userId    String?
   mentorId  String?
   type      String
   message   String
+  isRead    Boolean  @default(false)
+  actionUrl String?
   status    String   @default("PENDING")
   createdAt DateTime @default(now())
 }

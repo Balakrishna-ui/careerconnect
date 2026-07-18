@@ -33,21 +33,24 @@ export async function getMentorDashboardRealtime(mentorUserId: string) {
   // Group Bookings
   const confirmedBookings = mentor.bookings.filter(b => b.status === "CONFIRMED");
   const pendingBookings = mentor.bookings.filter(b => b.status === "PENDING");
+  const completedBookings = mentor.bookings.filter(b => b.status === "COMPLETED");
   
   const todaysSessions = confirmedBookings.filter(b => {
     const bDate = new Date(b.date);
     return bDate >= today && bDate < tomorrow;
   });
 
-  // Calculate Earnings
+  // Calculate Earnings (Real-time completed vs expected today)
   const earningsToday = todaysSessions.reduce((sum, b) => sum + b.price, 0);
-  const earningsThisWeek = confirmedBookings
+  const earningsThisWeek = completedBookings
     .filter(b => new Date(b.date) >= startOfWeek)
     .reduce((sum, b) => sum + b.price, 0);
-  const earningsThisMonth = confirmedBookings
+  const earningsThisMonth = completedBookings
     .filter(b => new Date(b.date) >= startOfMonth)
     .reduce((sum, b) => sum + b.price, 0);
-  const pendingPayout = Math.floor(earningsThisMonth * 0.8); // Mock value
+  
+  // Real pending payout is all completed bookings that haven't been withdrawn
+  const pendingPayout = completedBookings.reduce((sum, b) => sum + b.price, 0);
 
   // @ts-ignore
   const pendingReschedules = await prisma.rescheduleRequest.findMany({
@@ -76,6 +79,7 @@ export async function getMentorDashboardRealtime(mentorUserId: string) {
     : null;
 
   return {
+    vacationMode: mentor.vacationMode,
     pendingBookings: JSON.parse(JSON.stringify(pendingBookings)),
     confirmedBookings: JSON.parse(JSON.stringify(confirmedBookings)),
     todaysSessions: JSON.parse(JSON.stringify(todaysSessions)),
@@ -92,20 +96,30 @@ export async function getMentorDashboardRealtime(mentorUserId: string) {
 }
 
 export async function getJobSeekerDashboardRealtime(userId: string) {
-  const allBookings = await prisma.booking.findMany({
-    where: {
-      userId: userId,
-    },
-    include: {
-      mentor: true,
-      payment: true,
-      // @ts-ignore
-      rescheduleReq: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+  const [allBookings, user, recommendedMentors] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        userId: userId,
+      },
+      include: {
+        mentor: true,
+        payment: true,
+        // @ts-ignore
+        rescheduleReq: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+    }),
+    prisma.mentor.findMany({
+      where: { applicationStatus: "VERIFIED" },
+      orderBy: { rating: "desc" },
+      take: 5,
+    })
+  ]);
 
   const now = new Date();
 
@@ -120,6 +134,26 @@ export async function getJobSeekerDashboardRealtime(userId: string) {
   const amountSpent = allBookings.reduce((acc, curr) => acc + (curr.payment?.amount || 0), 0);
   const pastBookings = allBookings.filter((b) => new Date(b.endTime) < now || b.status === "CANCELLED" || b.status === "REJECTED");
 
+  let profileCompletion = 0;
+  let nextStep = "";
+  if (user) {
+    let score = 0;
+    if (user.name) score += 25;
+    else if (!nextStep) nextStep = "Add your name";
+    
+    if (user.email) score += 25;
+    else if (!nextStep) nextStep = "Verify your email";
+    
+    if (user.mobile) score += 25;
+    else if (!nextStep) nextStep = "Add your mobile number";
+    
+    if (user.image) score += 25;
+    else if (!nextStep) nextStep = "Add a profile picture";
+    
+    if (!nextStep && score === 100) nextStep = "Explore mentors";
+    profileCompletion = score;
+  }
+
   return {
     totalSessions,
     completedSessions,
@@ -127,5 +161,8 @@ export async function getJobSeekerDashboardRealtime(userId: string) {
     upcomingBookings: JSON.parse(JSON.stringify(upcomingBookings)),
     pastBookings: JSON.parse(JSON.stringify(pastBookings)),
     allBookings: JSON.parse(JSON.stringify(allBookings)),
+    profileCompletion,
+    nextStep,
+    recommendedMentors: JSON.parse(JSON.stringify(recommendedMentors))
   };
 }

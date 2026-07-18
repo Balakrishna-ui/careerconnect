@@ -36,6 +36,7 @@ export default async function JobSeekerDashboard() {
       firstName={firstName} 
       initialData={initialData}
       needsReviewBookings={needsReviewBookings}
+      isPremium={user.premium || false}
     />
   );
 }

@@ -48,10 +48,11 @@ export async function GET(request: Request) {
       status: b.status
     }));
 
-    // Simple completion logic: name + email always present = 100% for now
-    // If they have more profile fields later, update here.
-    let completion = 100; 
-
+    let completion = 0;
+    if (user.name) completion += 25;
+    if (user.email) completion += 25;
+    if (user.mobile) completion += 25;
+    if (user.image) completion += 25;
     return NextResponse.json({ 
       user: {
         id: user.id,

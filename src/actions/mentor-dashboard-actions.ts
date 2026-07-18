@@ -45,6 +45,19 @@ export async function updateMentorAvailability(isAvailable: boolean) {
   return { success: true };
 }
 
+export async function toggleVacationMode(mentorUserId: string, isVacation: boolean) {
+  try {
+    await prisma.mentor.update({
+      where: { userId: mentorUserId },
+      data: { vacationMode: isVacation }
+    });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+
 export async function getMentorDashboardData() {
   const mentorId = await getMentorId();
   

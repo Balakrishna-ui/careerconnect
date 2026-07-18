@@ -1,5 +1,6 @@
 "use server";
 
+import { GoogleGenAI, Type } from "@google/genai";
 import { prisma } from "@/lib/prisma";
 import {
   addDays,
@@ -10,6 +11,7 @@ import {
   isEqual,
   parseISO,
 } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,7 +77,8 @@ export async function getAvailableDates(
   mentorId: string,
   year: number,
   month: number, // 0-indexed (JS Date convention)
-  sessionDuration: number = 60
+  sessionDuration: number = 60,
+  userTimeZone: string = "UTC"
 ): Promise<AvailableDate[]> {
   // Fetch mentor settings
   const settings = await prisma.mentorSettings.findUnique({
@@ -209,7 +212,8 @@ export async function getAvailableDates(
 export async function getAvailableSlots(
   mentorId: string,
   dateStr: string,
-  sessionDuration: number = 60
+  sessionDuration: number = 60,
+  userTimeZone: string = "UTC"
 ): Promise<TimeSlot[]> {
   const date = parseISO(dateStr); // "YYYY-MM-DD"
   const dayOfWeek = date.getDay();
@@ -251,31 +255,44 @@ export async function getAvailableSlots(
     end: format(new Date(b.endTime), "HH:mm"),
   }));
 
-  // Generate all possible slots
   const [sh, sm] = schedule.startTime.split(":").map(Number);
   const [eh, em] = schedule.endTime.split(":").map(Number);
+  
+  const mentorTimeZone = mentor.timezone || "UTC";
+
+  // Mentor's slot times are stored as strings (e.g. "09:00") in the mentor's timezone.
+  // We construct the start/end Date objects in the mentor's timezone.
+  const mentorBaseStr = `${format(date, "yyyy-MM-dd")}T${schedule.startTime}:00`;
+  const mentorEndStr = `${format(date, "yyyy-MM-dd")}T${schedule.endTime}:00`;
+  
+  // Convert mentor's local time string to UTC Date
+  let currentUTC = fromZonedTime(mentorBaseStr, mentorTimeZone);
+  const endUTC = fromZonedTime(mentorEndStr, mentorTimeZone);
 
   const slots: TimeSlot[] = [];
-  const baseDate = new Date(date);
-  baseDate.setHours(sh, sm, 0, 0);
-
-  const endTime = new Date(date);
-  endTime.setHours(eh, em, 0, 0);
-
-  let current = new Date(baseDate);
 
   while (true) {
-    const slotEnd = addMinutes(current, sessionDuration);
+    const slotEndUTC = addMinutes(currentUTC, sessionDuration);
 
-    // Don't exceed working hours
-    if (isBefore(endTime, slotEnd) && !isEqual(endTime, slotEnd)) break;
+    if (isBefore(endUTC, slotEndUTC) && !isEqual(endUTC, slotEndUTC)) break;
 
-    const slotStartStr = format(current, "HH:mm");
-    const slotEndStr = format(slotEnd, "HH:mm");
+    // Convert slot UTC time to user's timezone for display
+    const slotStartUser = toZonedTime(currentUTC, userTimeZone);
+    const slotEndUser = toZonedTime(slotEndUTC, userTimeZone);
+    
+    // Check if the slot belongs to the requested date in the user's timezone
+    if (format(slotStartUser, "yyyy-MM-dd") !== dateStr) {
+      // Move to next slot (session + buffer)
+      currentUTC = addMinutes(currentUTC, sessionDuration + bufferTime);
+      continue;
+    }
 
-    // Check if this slot overlaps with any booked slots
-    const isBooked = bookedRanges.some((booked) => {
-      return slotStartStr < booked.end && slotEndStr > booked.start;
+    const slotStartStr = format(slotStartUser, "HH:mm");
+    const slotEndStr = format(slotEndUser, "HH:mm");
+
+    // Check overlaps (bookedRanges are in UTC from DB)
+    const isBooked = existingBookings.some((booked) => {
+       return currentUTC < booked.endTime && slotEndUTC > booked.startTime;
     });
 
     slots.push({
@@ -285,7 +302,7 @@ export async function getAvailableSlots(
     });
 
     // Move to next slot (session + buffer)
-    current = addMinutes(current, sessionDuration + bufferTime);
+    currentUTC = addMinutes(currentUTC, sessionDuration + bufferTime);
   }
 
   return slots;
@@ -299,12 +316,13 @@ export async function createBooking(data: {
   serviceId: string;
   dateStr: string; // "YYYY-MM-DD"
   startTime: string; // "HH:mm"
+  userTimeZone?: string;
   goal?: string;
   experience?: string;
   message?: string;
   resumeUrl?: string;
 }) {
-  const { mentorId, userId, serviceId, dateStr, startTime, goal, experience, message, resumeUrl } = data;
+  const { mentorId, userId, serviceId, dateStr, startTime, userTimeZone = "UTC", goal, experience, message, resumeUrl } = data;
 
   // Get service
   const service = await prisma.sessionType.findUnique({
@@ -315,7 +333,7 @@ export async function createBooking(data: {
   }
 
   // Verify slot is still available
-  const slots = await getAvailableSlots(mentorId, dateStr, service.duration);
+  const slots = await getAvailableSlots(mentorId, dateStr, service.duration, userTimeZone);
   const slot = slots.find((s) => s.start === startTime && s.available);
 
   if (!slot) {
@@ -333,13 +351,10 @@ export async function createBooking(data: {
   }
 
   const sessionDuration = service.duration;
-  const price = service.price;
-  const date = parseISO(dateStr);
-  const [h, m] = startTime.split(":").map(Number);
-
-  const bookingStart = new Date(date);
-  bookingStart.setHours(h, m, 0, 0);
-
+  
+  // Construct the booked time in UTC based on the user's timezone selection
+  const userDateTimeStr = `${dateStr}T${startTime}:00`;
+  const bookingStart = fromZonedTime(userDateTimeStr, userTimeZone);
   const bookingEnd = addMinutes(bookingStart, sessionDuration);
 
   // Create booking + payment in a transaction
@@ -347,7 +362,7 @@ export async function createBooking(data: {
     data: {
       userId,
       mentorId,
-      date: startOfDay(date),
+      date: startOfDay(bookingStart),
       startTime: bookingStart,
       endTime: bookingEnd,
       status: "AWAITING_PAYMENT",
@@ -512,6 +527,25 @@ export async function completeSession(bookingId: string, notes: { performance: n
     }
   });
 
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { mentor: true }
+  });
+
+  if (booking) {
+    await prisma.notification.create({
+      data: {
+        bookingId,
+        userId: booking.userId,
+        mentorId: booking.mentorId,
+        type: "SESSION_COMPLETED",
+        message: `Your session with ${booking.mentor.name} has been completed. Check out their notes and generate your AI roadmap!`,
+        actionUrl: `/dashboard/bookings/${bookingId}`,
+        status: "PENDING",
+      }
+    });
+  }
+
   return { success: true };
 }
 
@@ -545,6 +579,17 @@ export async function cancelBooking(bookingId: string) {
       data: { status: "REFUNDED" },
     });
   }
+
+  await prisma.notification.create({
+    data: {
+      bookingId,
+      userId: booking.userId,
+      mentorId: booking.mentorId,
+      type: "BOOKING_CANCELLED",
+      message: `A booking on ${booking.date.toDateString()} was cancelled.`,
+      status: "PENDING",
+    }
+  });
 
   return { success: true, refunded: refundable };
 }
@@ -614,49 +659,93 @@ export async function generateSessionSummary(bookingId: string) {
 
   const { weakness, strength, recommendation } = booking.sessionNotes;
 
-  // In a real application, we would call OpenAI/Gemini here to generate a detailed roadmap based on the mentor's notes.
-  // For the purpose of this implementation, we will simulate the AI output.
+  let aiData = {
+    discussionTopics: "Career Growth, Interview Preparation, Resume Review",
+    interviewTips: "1. Structure your answers using the STAR method.\n2. Emphasize your impact with numbers.\n3. Keep your introduction under 2 minutes.",
+    missingSkills: weakness || "System Design, Advanced SQL, Stakeholder Management",
+    projectsToBuild: "1. Build an end-to-end data pipeline using Apache Airflow.\n2. Create a full-stack dashboard for realtime metrics.",
+    roadmap: "Month 1: Focus on core algorithms and data structures.\nMonth 2: Build 2 advanced portfolio projects.\nMonth 3: Mock interviews and application blitz.",
+    tasks: [
+      { title: "Revise Resume according to mentor's notes", daysToComplete: 3 },
+      { title: "Complete the System Design primer", daysToComplete: 7 },
+      { title: "Schedule next follow-up session", daysToComplete: 14 }
+    ]
+  };
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `Based on the following session notes from a mentor, generate a detailed career roadmap, actionable advice, and 3 follow up tasks.
+      Strength: ${strength}
+      Weakness: ${weakness}
+      Recommendation: ${recommendation}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              discussionTopics: { type: Type.STRING },
+              interviewTips: { type: Type.STRING },
+              missingSkills: { type: Type.STRING },
+              projectsToBuild: { type: Type.STRING },
+              roadmap: { type: Type.STRING },
+              tasks: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    daysToComplete: { type: Type.INTEGER }
+                  },
+                }
+              }
+            },
+          }
+        }
+      });
+      
+      if (response.text) {
+        aiData = JSON.parse(response.text);
+      }
+    } catch (error) {
+      console.error("AI Generation failed, falling back to simulated data:", error);
+    }
+  } else {
+    console.warn("GEMINI_API_KEY not found. Using simulated AI data.");
+  }
 
   // 1. Create Session Summary
   const summary = await prisma.sessionSummary.create({
     data: {
       bookingId,
-      discussionTopics: "Career Growth, Interview Preparation, Resume Review",
-      interviewTips: "1. Structure your answers using the STAR method.\n2. Emphasize your impact with numbers.\n3. Keep your introduction under 2 minutes.",
-      missingSkills: weakness || "System Design, Advanced SQL, Stakeholder Management",
-      projectsToBuild: "1. Build an end-to-end data pipeline using Apache Airflow.\n2. Create a full-stack dashboard for realtime metrics.",
-      roadmap: "Month 1: Focus on core algorithms and data structures.\nMonth 2: Build 2 advanced portfolio projects.\nMonth 3: Mock interviews and application blitz."
+      discussionTopics: aiData.discussionTopics,
+      interviewTips: aiData.interviewTips,
+      missingSkills: aiData.missingSkills,
+      projectsToBuild: aiData.projectsToBuild,
+      roadmap: aiData.roadmap,
     }
   });
 
   // 2. Create Follow-up Tasks (MentorTasks)
-  const task1 = await prisma.mentorTask.create({
-    data: {
-      bookingId,
-      title: "Revise Resume according to mentor's notes",
-      deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
-    }
-  });
-
-  const task2 = await prisma.mentorTask.create({
-    data: {
-      bookingId,
-      title: "Complete the System Design primer",
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-    }
-  });
-  
-  const task3 = await prisma.mentorTask.create({
-    data: {
-      bookingId,
-      title: "Schedule next follow-up session",
-      deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 days
-    }
-  });
+  const createdTasks = [];
+  for (const task of aiData.tasks) {
+    const t = await prisma.mentorTask.create({
+      data: {
+        bookingId,
+        title: task.title,
+        deadline: new Date(Date.now() + task.daysToComplete * 24 * 60 * 60 * 1000)
+      }
+    });
+    createdTasks.push(t);
+  }
 
   return { 
     success: true, 
     summary: JSON.parse(JSON.stringify(summary)), 
-    tasks: JSON.parse(JSON.stringify([task1, task2, task3])) 
+    tasks: JSON.parse(JSON.stringify(createdTasks)) 
   };
 }

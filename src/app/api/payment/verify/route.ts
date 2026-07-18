@@ -79,6 +79,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Payment verified successfully" });
     }
 
+    if (type === "PREMIUM_UNLOCK") {
+      // Update User premium status
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { premium: true }
+      });
+
+      // Create Subscription Record
+      await prisma.subscription.create({
+        data: {
+          userId: session.user.id,
+          plan: "PRO",
+          price: 99,
+          active: true,
+          startDate: new Date(),
+        }
+      });
+
+      return NextResponse.json({ success: true, message: "Upgraded to Pro successfully" });
+    }
+
     return NextResponse.json({ error: "Invalid payment type" }, { status: 400 });
 
   } catch (error: any) {

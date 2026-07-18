@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Clock, Video, FileText, IndianRupee, MessageSquare, AlertCircle, Download } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Video, FileText, IndianRupee, MessageSquare, AlertCircle, Download, CheckCircle2, Star } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,55 @@ import Image from "next/image";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { CareerRoadmap } from "@/components/dashboard/CareerRoadmap";
+import { ReviewSessionDialog } from "@/components/dashboard/ReviewSessionDialog";
+
+function BookingTimeline({ status, isCompleted }: { status: string, isCompleted: boolean }) {
+  const steps = [
+    { id: 'PENDING', label: 'Requested' },
+    { id: status === 'REJECTED' ? 'REJECTED' : status === 'CANCELLED' ? 'CANCELLED' : 'CONFIRMED', label: status === 'REJECTED' ? 'Rejected' : status === 'CANCELLED' ? 'Cancelled' : 'Approved' },
+    { id: 'COMPLETED', label: 'Completed' }
+  ];
+
+  let currentStepIndex = 0;
+  if (status === 'CONFIRMED' || status === 'REJECTED' || status === 'CANCELLED') currentStepIndex = 1;
+  if (status === 'COMPLETED' || isCompleted) currentStepIndex = 2;
+
+  return (
+    <div className="mb-8 p-6 bg-card border rounded-xl shadow-sm">
+      <div className="flex items-center justify-between relative">
+        <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-border -z-10 -translate-y-1/2"></div>
+        <div className="absolute left-0 top-1/2 h-0.5 bg-primary -z-10 -translate-y-1/2 transition-all duration-500" style={{ width: `${(currentStepIndex / 2) * 100}%` }}></div>
+        
+        {steps.map((step, idx) => {
+          const isPast = idx < currentStepIndex;
+          const isCurrent = idx === currentStepIndex;
+          const isError = step.id === 'REJECTED' || step.id === 'CANCELLED';
+          
+          return (
+            <div key={step.id} className="flex flex-col items-center gap-2 bg-card px-2">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300",
+                isPast || (isCurrent && !isError) ? "bg-primary border-primary text-primary-foreground shadow-md shadow-primary/20" :
+                isError ? "bg-destructive border-destructive text-destructive-foreground shadow-md shadow-destructive/20" :
+                "bg-muted border-border text-muted-foreground"
+              )}>
+                {isPast || (isCurrent && !isError) ? <CheckCircle2 className="w-5 h-5" /> : 
+                 isError ? <AlertCircle className="w-5 h-5" /> :
+                 <span className="font-bold text-sm">{idx + 1}</span>}
+              </div>
+              <span className={cn(
+                "text-sm font-semibold",
+                isPast || isCurrent ? (isError ? "text-destructive" : "text-foreground") : "text-muted-foreground"
+              )}>
+                {step.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default async function BookingDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -48,6 +97,10 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
   const isLive = new Date() >= new Date(booking.startTime) && new Date() <= new Date(booking.endTime);
   const isUpcoming = new Date(booking.startTime) > new Date();
 
+  const review = await prisma.review.findUnique({
+    where: { bookingId: booking.id }
+  });
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-primary mb-6 inline-flex items-center">
@@ -68,6 +121,8 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
           {booking.status === "CANCELLED" && <Badge variant="destructive">Cancelled</Badge>}
         </div>
       </div>
+
+      <BookingTimeline status={booking.status} isCompleted={isCompleted} />
 
       {booking.rescheduleReq && (
         <Card className={cn("mb-8 shadow-sm border", 
@@ -232,9 +287,22 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
 
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle>Support</CardTitle>
+              <CardTitle>Support & Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {isCompleted && !review && (
+                <ReviewSessionDialog bookingId={booking.id} mentorName={booking.mentor.name} />
+              )}
+              {isCompleted && review && (
+                <div className="p-4 bg-muted/40 rounded-lg border flex flex-col items-center justify-center text-center">
+                  <p className="text-sm font-medium mb-1">You rated this session</p>
+                  <div className="flex gap-1 text-amber-400">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} className={cn("w-4 h-4", i < review.rating ? "fill-amber-400" : "text-muted-foreground")} />
+                    ))}
+                  </div>
+                </div>
+              )}
               <a href={`mailto:${booking.mentor.user?.email || ''}?subject=Support needed for Booking BK-${booking.id.slice(-8).toUpperCase()}`} className={cn(buttonVariants({ variant: "outline" }), "w-full justify-start")}>
                 <MessageSquare className="h-4 w-4 mr-2" /> Contact Mentor
               </a>
@@ -248,3 +316,4 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
     </div>
   );
 }
+

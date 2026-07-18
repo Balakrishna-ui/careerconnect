@@ -1,6 +1,7 @@
 "use client";
 
-import { Video, Clock, CheckCircle } from "lucide-react";
+import { Video, Clock, CheckCircle, Copy, Check } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 interface TodaySessionCardProps {
@@ -23,6 +24,15 @@ export function TodaySessionCard({
   onMarkCompleted
 }: TodaySessionCardProps) {
   const isCompleted = status === "COMPLETED";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    if (meetingLink) {
+      navigator.clipboard.writeText(meetingLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4 rounded-xl border ${isCompleted ? 'bg-muted/30 border-transparent' : 'bg-card border-border shadow-sm'} transition-all`}>
@@ -57,13 +67,24 @@ export function TodaySessionCard({
               </Button>
             )}
             {meetingLink ? (
-              <Button 
-                className="rounded-xl shadow-sm bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
-                onClick={() => window.open(meetingLink, '_blank')}
-              >
-                <Video className="w-4 h-4 mr-2" />
-                Join Meeting
-              </Button>
+              <>
+                <Button 
+                  variant="outline"
+                  size="icon"
+                  className="rounded-xl shadow-sm shrink-0"
+                  onClick={handleCopyLink}
+                  title="Copy Meeting Link"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                </Button>
+                <Button 
+                  className="rounded-xl shadow-sm bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                  onClick={() => window.open(meetingLink, '_blank')}
+                >
+                  <Video className="w-4 h-4 mr-2" />
+                  Join Meeting
+                </Button>
+              </>
             ) : (
               <Button variant="secondary" className="rounded-xl w-full sm:w-auto" disabled>
                 <Video className="w-4 h-4 mr-2" />

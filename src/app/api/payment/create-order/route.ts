@@ -14,12 +14,17 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { amount, currency = "INR", receipt = "receipt" } = body;
 
-    if (!amount) {
-      return NextResponse.json({ error: "Amount is required" }, { status: 400 });
+    let finalAmount = amount;
+
+    // If it's a booking, check if user is premium and apply discount
+    if (session.user.premium) {
+      // 10% discount for premium users, or waive a flat platform fee.
+      // Let's do a 10% discount for now.
+      finalAmount = Math.max(0, amount * 0.9);
     }
 
     const options = {
-      amount: amount * 100, // Razorpay expects amount in smallest currency unit (paise)
+      amount: Math.round(finalAmount * 100), // Razorpay expects amount in smallest currency unit (paise)
       currency,
       receipt: `${receipt}_${Date.now()}`,
     };

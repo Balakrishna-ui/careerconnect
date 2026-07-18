@@ -165,6 +165,9 @@ function BookingCalendar({
           <ChevronRight className="w-5 h-5" />
         </Button>
       </div>
+      <div className="text-center text-xs text-muted-foreground mb-4">
+        Showing availability in {Intl.DateTimeFormat().resolvedOptions().timeZone} time
+      </div>
 
       {/* Day headers */}
       <div className="grid grid-cols-7 gap-1 mb-2">
@@ -369,6 +372,15 @@ export default function BookingPageClient({
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [userTimeZone, setUserTimeZone] = useState("UTC");
+  
+  useEffect(() => {
+    try {
+      setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch (e) {
+      console.warn("Timezone detection failed, fallback to UTC");
+    }
+  }, []);
   
   // Details
   const [goal, setGoal] = useState("");
@@ -393,6 +405,13 @@ export default function BookingPageClient({
   const [copied, setCopied] = useState(false);
   const [hasError, setHasError] = useState(false);
 
+  const isPremium = session?.user?.premium;
+
+  // Calculate prices
+  const calculatePrice = (basePrice: number) => {
+    return isPremium ? Math.round(basePrice * 0.9) : basePrice;
+  };
+
   // ── Load mentor profile ──
   useEffect(() => {
     startTransition(async () => {
@@ -413,7 +432,7 @@ export default function BookingPageClient({
     setHasError(false);
     startTransition(async () => {
       try {
-        const dates = await getAvailableDates(mentorId, calYear, calMonth, selectedService.duration);
+        const dates = await getAvailableDates(mentorId, calYear, calMonth, selectedService.duration, userTimeZone);
         setAvailableDates(dates);
       } catch (err) {
         setHasError(true);
@@ -429,10 +448,10 @@ export default function BookingPageClient({
   useEffect(() => {
     if (!selectedDate || !selectedService) return;
     startTransition(async () => {
-      const s = await getAvailableSlots(mentorId, selectedDate, selectedService.duration);
+      const s = await getAvailableSlots(mentorId, selectedDate, selectedService.duration, userTimeZone);
       setSlots(s);
     });
-  }, [mentorId, selectedDate, selectedService]);
+  }, [mentorId, selectedDate, selectedService, userTimeZone]);
 
   const handleDateSelect = useCallback((d: string) => {
     setSelectedDate(d);
@@ -481,6 +500,7 @@ export default function BookingPageClient({
         serviceId: selectedServiceId,
         dateStr: selectedDate,
         startTime: selectedSlot,
+        userTimeZone,
         goal,
         experience,
         message,
@@ -674,7 +694,15 @@ export default function BookingPageClient({
                         >
                           <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-lg">{service.title}</h3>
-                            <span className="text-xl font-extrabold text-primary">₹{service.price.toLocaleString()}</span>
+                            <div className="text-right">
+                              {isPremium && (
+                                <div className="text-xs text-muted-foreground line-through">₹{service.price.toLocaleString()}</div>
+                              )}
+                              <span className="text-xl font-extrabold text-primary flex items-center gap-1">
+                                ₹{calculatePrice(service.price).toLocaleString()}
+                                {isPremium && <Badge className="h-4 px-1 text-[8px] bg-amber-400 hover:bg-amber-500 text-amber-950 ml-1">PRO</Badge>}
+                              </span>
+                            </div>
                           </div>
                           <div className="flex items-center text-sm text-muted-foreground gap-3">
                             <span className="flex items-center gap-1.5"><Clock className="w-4 h-4"/> {service.duration} min session</span>
@@ -928,11 +956,14 @@ export default function BookingPageClient({
                       <div className="border-t border-border" />
                       <div className="flex justify-between items-center">
                         <span className="text-base font-bold">
-                          Total Amount
+                          Total Amount {isPremium && <span className="text-xs font-normal text-amber-600">(10% Pro Discount Applied)</span>}
                         </span>
-                        <span className="text-2xl font-extrabold text-primary">
-                          ₹{selectedService.price.toLocaleString()}
-                        </span>
+                        <div className="text-right">
+                          {isPremium && <div className="text-xs text-muted-foreground line-through">₹{selectedService.price.toLocaleString()}</div>}
+                          <span className="text-2xl font-extrabold text-primary">
+                            ₹{calculatePrice(selectedService.price).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -951,7 +982,7 @@ export default function BookingPageClient({
                         ) : (
                           <>
                             <CreditCard className="w-5 h-5 mr-2" />
-                            Pay ₹{selectedService.price.toLocaleString()} via Razorpay
+                            Pay ₹{calculatePrice(selectedService.price).toLocaleString()} via Razorpay
                           </>
                         )}
                       </Button>
@@ -1034,7 +1065,7 @@ export default function BookingPageClient({
                           Amount Paid
                         </span>
                         <span className="font-bold text-emerald-600">
-                          ₹{(selectedService?.price || 0).toLocaleString()}
+                          ₹{calculatePrice(selectedService?.price || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -1165,9 +1196,12 @@ export default function BookingPageClient({
                         <span className="text-sm text-muted-foreground">
                           Price
                         </span>
-                        <span className="text-lg font-extrabold text-primary">
-                          ₹{(selectedService?.price || 0).toLocaleString()}
-                        </span>
+                        <div className="text-right">
+                           {isPremium && <div className="text-xs text-muted-foreground line-through">₹{(selectedService?.price || 0).toLocaleString()}</div>}
+                           <span className="text-lg font-extrabold text-primary">
+                             ₹{calculatePrice(selectedService?.price || 0).toLocaleString()}
+                           </span>
+                        </div>
                       </div>
                     </div>
 
