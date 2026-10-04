@@ -45,6 +45,83 @@ export default function MentorsContent() {
     totalVerified: number;
   } | null>(null);
 
+  const [savedMentorIds, setSavedMentorIds] = useState<Set<string>>(new Set());
+  const [savingMentorId, setSavingMentorId] = useState<string | null>(null);
+
+  // Fetch saved mentors for current user
+  useEffect(() => {
+    async function loadSavedMentors() {
+      try {
+        const res = await fetch("/api/saved-mentors");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.savedMentorIds)) {
+            setSavedMentorIds(new Set(data.savedMentorIds));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load saved mentors:", err);
+      }
+    }
+    loadSavedMentors();
+  }, []);
+
+  const handleToggleSave = useCallback(async (mentorId: string) => {
+    if (savingMentorId) return;
+    setSavingMentorId(mentorId);
+
+    // Optimistic toggle
+    setSavedMentorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(mentorId)) {
+        next.delete(mentorId);
+      } else {
+        next.add(mentorId);
+      }
+      return next;
+    });
+
+    try {
+      const res = await fetch("/api/saved-mentors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mentorId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && data.requiresAuth) {
+          window.location.href = "/signup?view=login";
+          return;
+        }
+        // Rollback on failure
+        setSavedMentorIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(mentorId)) {
+            next.delete(mentorId);
+          } else {
+            next.add(mentorId);
+          }
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("Error toggling saved mentor:", err);
+      // Rollback on error
+      setSavedMentorIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(mentorId)) {
+          next.delete(mentorId);
+        } else {
+          next.add(mentorId);
+        }
+        return next;
+      });
+    } finally {
+      setSavingMentorId(null);
+    }
+  }, [savingMentorId]);
+
   const LIMIT = 12;
 
   // Debounce search
@@ -59,7 +136,7 @@ export default function MentorsContent() {
   }, [filters, debouncedSearch, sortBy]);
 
   // Fetch mentors whenever filters or page changes
-  useEffect(() => {
+  const fetchMentors = useCallback(() => {
     startTransition(async () => {
       const apiFilters: MentorFilters = {
         search: debouncedSearch || undefined,
@@ -85,6 +162,28 @@ export default function MentorsContent() {
       setResults({ mentors: data.mentors as never[], total: data.total });
     });
   }, [filters, debouncedSearch, sortBy, page]);
+
+  useEffect(() => {
+    fetchMentors();
+  }, [fetchMentors]);
+
+  // Real-time updates via Pusher
+  useEffect(() => {
+    import("@/lib/pusher-client").then(({ getPusherClient }) => {
+      const pusher = getPusherClient();
+      const channel = pusher.subscribe("public-mentors");
+      
+      channel.bind("mentor-verified", () => {
+        // Trigger a silent re-fetch when a new mentor is verified
+        fetchMentors();
+      });
+
+      return () => {
+        channel.unbind_all();
+        pusher.unsubscribe("public-mentors");
+      };
+    });
+  }, [fetchMentors]);
 
   // Load sidebar counts once
   useEffect(() => {
@@ -260,7 +359,14 @@ export default function MentorsContent() {
                   }
                 >
                   {(results.mentors as any[]).map((mentor) => (
-                    <MentorResultCard key={mentor.id} mentor={mentor} view={view} />
+                    <MentorResultCard
+                      key={mentor.id}
+                      mentor={mentor}
+                      view={view}
+                      isSaved={savedMentorIds.has(mentor.id)}
+                      onToggleSave={handleToggleSave}
+                      isSaving={savingMentorId === mentor.id}
+                    />
                   ))}
                 </div>
 

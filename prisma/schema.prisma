@@ -28,23 +28,117 @@ model User {
   lastLoginAt   DateTime?
   bookings      Booking[]
   subscriptions Subscription[]
+  invoices      Invoice[]
+  tasks         JobSeekerTask[]
+  documents     UserDocument[]
+  conversations1 Conversation[] @relation("User1")
+  conversations2 Conversation[] @relation("User2")
+  messages      Message[]
 
   emailVerified DateTime?
   accounts      Account[]
   sessions      Session[]
   savedMentors  SavedMentor[]
   reviews       Review[]
+  supportTickets SupportTicket[] @relation("TicketCreator")
+  assignedTickets SupportTicket[] @relation("AssignedAdmin")
+  supportMessages SupportMessage[]
+
+  // Security & Fraud
+  isMfaEnabled      Boolean      @default(false)
+  mfaSecret         String?      
+  riskScore         Int          @default(0)
+  riskLevel         String       @default("LOW")
+  fraudStatus       String       @default("CLEARED")
+  failedLoginAttempts Int        @default(0)
+  lockedUntil       DateTime?
+  jwtVersion        Int          @default(0)
+  loginHistory      LoginHistory[]
+  devices           DeviceFingerprint[]
+  securityEvents    SecurityEvent[]
+  auditLogsTargeted AdminAuditLog[] @relation("TargetUser")
+  // Job Seeker Profile Fields
+  headline          String?
+  bio               String?  @db.Text
+  location          String?
+  city              String?
+  state             String?
+  country           String?
+  dob               DateTime?
+  gender            String?
+  roleCategory      String?
+  coverImage        String?
+  experienceYears   Int?
+  industry          String?
+  
+  // Professional Information
+  jobTitle          String?
+  currentCompany    String?
+  employmentType    String?
+  careerLevel       String?
+  expectedSalary    String?
+  noticePeriod      String?
+  employmentStatus  String?
+  
+  // Career Preferences
+  targetJobTitle    String?
+  preferredJobRoles String?
+  preferredIndustries String?
+  preferredLocations  String?
+  workPreferences   String? // Remote / Hybrid / On-site
+  expectedSalaryRange String?
+  preferredEmploymentType String? // Full-time, Part-time, Contract, Internship
+  openToRelocation  Boolean @default(false)
+  careerGoals       String? @db.Text
+  isFresher         Boolean @default(false)
+  targetDomains     String?
+  specializations   String?
+  currentSalary     String?
+
+  // Shared generic relations
+  experiences       Experience[]
+  educations        Education[]
+  projects          Project[]
+  certifications    Certification[]
+  skills            Skill[]
+  socialProfile     SocialProfile?
+
+  accountStatus     String @default("ACTIVE") // ACTIVE, SUSPENDED
 }
 
 model Subscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan      String   @default("PREMIUM")
-  price     Int      @default(99)
-  active    Boolean  @default(true)
-  startDate DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan         String    @default("PREMIUM") // FREE, PRO, PREMIUM
+  price        Int       @default(99)
+  status       String    @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  billingCycle String    @default("MONTHLY") // MONTHLY, QUARTERLY, YEARLY
+  autoRenew    Boolean   @default(true)
+  startDate    DateTime  @default(now())
+  endDate      DateTime?
+  renewalDate  DateTime?
+  invoices     Invoice[]
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, status])
+}
+
+model Invoice {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           DateTime     @default(now())
+  planName       String
+  amount         Int
+  paymentMethod  String       @default("Card ending in 4242")
+  status         String       @default("PAID") // PAID, PENDING, FAILED, REFUNDED
+  pdfUrl         String?
+
+  @@index([userId])
+  @@index([subscriptionId])
 }
 
 model Mentor {
@@ -118,6 +212,7 @@ model Mentor {
 
   savedMentors SavedMentor[]
   reviews      Review[]
+  supportTickets SupportTicket[]
 
   experiences Experience[]
   educations  Education[]
@@ -126,12 +221,19 @@ model Mentor {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([applicationStatus, profileCompleted])
+  @@index([industry])
+  @@index([company])
+  @@index([companyTier])
 }
 
 model Skill {
   id       String @id @default(cuid())
-  mentorId String
-  mentor   Mentor @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  mentorId String?
+  mentor   Mentor? @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
   name     String
   category String // Technical, Non-Technical, Areas of Mentorship
 }
@@ -143,12 +245,16 @@ model SessionType {
   title    String // e.g., Resume Review
   duration Int // minutes
   price    Int // 0 if Free Discovery
+
+  @@index([mentorId])
 }
 
 model SocialProfile {
   id        String  @id @default(cuid())
-  mentorId  String  @unique
-  mentor    Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  mentorId  String?  @unique
+  mentor    Mentor?  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   linkedin  String
   portfolio String?
   github    String?
@@ -245,6 +351,7 @@ model Booking {
   meetingLink         String?
   
   // Additional Details
+  sessionTitle        String?            @default("1:1 Mentorship Session")
   goal                String?
   experience          String?
   message             String?            @db.Text
@@ -254,13 +361,22 @@ model Booking {
   // Relations
   payment             Payment?
   rescheduleReq       RescheduleRequest?
+  cancellationReq     CancellationRequest?
   notifications       Notification[]
   sessionNotes        SessionNote?
   sessionSummary      SessionSummary?
   tasks               MentorTask[]
+  supportTickets      SupportTicket[]
+  ledgerEntries       LedgerEntry[]
   
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+
+  @@index([userId, startTime])
+  @@index([mentorId, startTime, status])
+  @@index([status, startTime])
+  @@index([status, endTime])
+  @@index([date])
 }
 
 model SessionNote {
@@ -315,18 +431,84 @@ model RescheduleRequest {
   status        String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([mentorId, status])
+  @@index([jobSeekerId, status])
+}
+
+model CancellationRequest {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  mentorId      String
+  jobSeekerId   String
+  reason        String
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  refundAmount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([mentorId, status])
+  @@index([jobSeekerId, status])
 }
 
 model Payment {
-  id                String   @id @default(cuid())
-  bookingId         String   @unique
-  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  razorpayOrderId   String?  @unique
-  razorpayPaymentId String?  @unique
-  amount            Int
-  status            String   @default("PENDING")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                String        @id @default(cuid())
+  bookingId         String        @unique
+  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  amount            Int           // Gross amount in INR
+  platformFee       Int           @default(0) // Platform commission in INR
+  mentorEarnings    Int           @default(0) // Mentor net earnings in INR
+  currency          String        @default("INR")
+  status            String        @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED, PARTIALLY_REFUNDED
+  refundAmount      Int           @default(0)
+  refundStatus      String?       // PENDING, PROCESSED, FAILED
+  ledgerEntries     LedgerEntry[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  paymentId      String?
+  payment        Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  bookingId      String?
+  booking        Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  userId         String?  // Payer (Job Seeker ID)
+  mentorId       String?  // Payee (Mentor ID)
+  type           String   // PAYMENT, REFUND, PLATFORM_FEE, MENTOR_PAYOUT
+  grossAmount    Int      // Amount in INR
+  platformFee    Int      @default(0)
+  mentorEarnings Int      @default(0)
+  currency       String   @default("INR")
+  status         String   @default("COMPLETED") // PENDING, COMPLETED, FAILED, REVERSED
+  description    String?
+  referenceId    String?  // Razorpay Payment ID or Refund ID
+  metadata       String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([mentorId, createdAt])
+  @@index([userId, createdAt])
+  @@index([type, status])
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  eventId     String    @unique // Razorpay event ID (x-razorpay-event-id or payload.id)
+  eventType   String    // payment.captured, payment.failed, refund.processed
+  payload     String    @db.Text
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([eventType, processed])
 }
 
 model Notification {
@@ -341,6 +523,9 @@ model Notification {
   actionUrl String?
   status    String   @default("PENDING")
   createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([mentorId, type, createdAt])
 }
 
 model CalendarIntegration {
@@ -365,8 +550,10 @@ model CompanyEmailOTP {
 
 model Experience {
   id               String  @id @default(cuid())
-  mentorId         String
-  mentor           Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  mentorId         String?
+  mentor           Mentor?  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName      String
   designation      String
   duration         String
@@ -375,19 +562,35 @@ model Experience {
 }
 
 model Education {
-  id          String  @id @default(cuid())
-  mentorId    String
-  mentor      Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  mentorId    String?
+  mentor      Mentor?  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  degree      String   // Using this as Highest qualification
   college     String
-  degree      String
   passingYear String
-  cgpa        String?
+  
+  // New specific fields from screenshot
+  branch            String?
+  collegeTier       String?
+  scoreType         String?
+  cgpa              String?
+  currentlyStudying Boolean @default(false)
+  tenthMarks        String?
+  tenthYear         String?
+  twelfthMarks      String?
+  twelfthYear       String?
+  diplomaBranch     String?
+  diplomaYear       String?
 }
 
 model Project {
   id           String  @id @default(cuid())
-  mentorId     String
-  mentor       Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  mentorId     String?
+  mentor       Mentor?  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   title        String
   description  String? @db.Text
   githubUrl    String?
@@ -397,8 +600,10 @@ model Project {
 
 model Certification {
   id       String  @id @default(cuid())
-  mentorId String
-  mentor   Mentor  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  mentorId String?
+  mentor   Mentor?  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name     String
   issuer   String
   year     String?
@@ -462,4 +667,161 @@ model Review {
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
+
+  @@index([mentorId, rating])
+  @@index([userId])
+}
+
+// --- NEW SECURITY MODELS ---
+model LoginHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress    String?
+  userAgent    String?
+  country      String?
+  city         String?
+  status       String   // SUCCESS, FAILED, CHALLENGED
+  failureReason String?
+  createdAt    DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([ipAddress])
+}
+
+model DeviceFingerprint {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint  String   // Hash of OS, Browser, Res, etc.
+  isTrusted    Boolean  @default(false)
+  lastSeenAt   DateTime @default(now())
+  
+  @@unique([userId, fingerprint])
+  @@index([fingerprint])
+}
+
+model SecurityEvent {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType    String   // VPN_DETECTED, FAILED_PAYMENT, RAPID_BOOKING
+  riskImpact   Int      // +10, +25, etc.
+  description  String
+  metadata     String?  @db.Text // Store JSON as String
+  createdAt    DateTime @default(now())
+  
+  @@index([userId, createdAt])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  action       String   // USER_BANNED, RISK_CLEARED, VERIFIED
+  targetUserId String?
+  targetUser   User?    @relation("TargetUser", fields: [targetUserId], references: [id])
+  previousData String?  @db.Text
+  newData      String?  @db.Text
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  
+  @@index([adminId])
+  @@index([targetUserId])
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("TicketCreator", fields: [userId], references: [id], onDelete: Cascade)
+  mentorId    String
+  mentor      Mentor   @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  category    String
+  description String   @db.Text
+  attachment  String?
+  status      String   @default("OPEN") // OPEN, UNDER_REVIEW, IN_PROGRESS, RESOLVED, CLOSED
+  priority    String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  assignedToId String?
+  assignedTo  User?    @relation("AssignedAdmin", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  messages    SupportMessage[]
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([mentorId])
+  @@index([assignedToId])
+}
+
+model SupportMessage {
+  id            String   @id @default(cuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderRole    String   @default("USER") // USER, ADMIN
+  message       String   @db.Text
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([senderId])
+}
+
+
+model JobSeekerTask {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  priority    String   @default("MEDIUM")
+  deadline    DateTime?
+  completed   Boolean  @default(false)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, completed])
+}
+
+model UserDocument {
+  id        String   @id @default(cuid())
+  title     String
+  type      String   @default("RESUME")
+  fileUrl   String
+  size      Int?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  user1     User     @relation("User1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("User2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([user1Id, user2Id])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  content        String
+  conversationId String
+  senderId       String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
 }

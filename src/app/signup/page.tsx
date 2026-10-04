@@ -12,8 +12,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MentorSignupForm } from "./MentorSignupForm";
 import { useState, useEffect } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function SignupPage() {
@@ -29,6 +29,20 @@ export default function SignupPage() {
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
   const [resetLinkUrl, setResetLinkUrl] = useState<string>("");
   const router = useRouter();
+  const { data: session, status } = useSession();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      if (session.user.role === "MENTOR") {
+        router.push("/mentor/dashboard");
+      } else if (session.user.role === "ADMIN") {
+        router.push("/admin");
+      } else {
+        router.push("/mentors");
+      }
+    }
+  }, [status, session, router]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -71,7 +85,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ firstName, lastName, email, password }),
@@ -94,15 +108,12 @@ export default function SignupPage() {
         setError("Registration successful, but login failed. Please sign in manually.");
         setIsLoading(false);
       } else {
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
-        
         const urlParams = new URLSearchParams(window.location.search);
         const callbackUrl = urlParams.get('callbackUrl');
         
         if (callbackUrl) {
           router.push(callbackUrl);
-        } else if (session?.user?.role === "MENTOR") {
+        } else if (activeTab === 'mentor') {
           router.push("/mentor/dashboard");
         } else {
           router.push("/dashboard");
@@ -135,15 +146,12 @@ export default function SignupPage() {
         setError(errorMessage);
         setIsLoading(false);
       } else {
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
-        
         const urlParams = new URLSearchParams(window.location.search);
         const callbackUrl = urlParams.get('callbackUrl');
         
         if (callbackUrl) {
           router.push(callbackUrl);
-        } else if (session?.user?.role === "MENTOR") {
+        } else if (activeTab === 'mentor') {
           router.push("/mentor/dashboard");
         } else {
           router.push("/dashboard");
@@ -183,6 +191,15 @@ export default function SignupPage() {
     }
   };
 
+  
+  const INPUT_CLASSES = "w-full h-14 bg-white border border-slate-200 rounded-[14px] text-[15px] font-medium placeholder:text-slate-400 shadow-[0_2px_8px_rgba(15,23,42,0.04)] hover:border-slate-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] focus-visible:border-blue-600 focus-visible:ring-[4px] focus-visible:ring-blue-600/15 focus-visible:outline-none transition-all duration-250 ease-out";
+  const LABEL_CLASSES = "text-[14px] font-semibold text-slate-700 mb-1.5 block ml-1";
+  const ICON_WRAPPER_CLASSES = "absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-600 transition-colors flex items-center justify-center";
+  const ICON_CLASSES = "h-[18px] w-[18px]";
+  const PRIMARY_BTN_CLASSES = "w-full mt-2 h-14 rounded-[16px] bg-gradient-to-b from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold shadow-[0_12px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_16px_36px_rgba(37,99,235,0.4)] active:scale-[0.98] transition-all duration-200 hover:-translate-y-[2px] flex items-center justify-center group";
+  const SECONDARY_BTN_CLASSES = "w-full h-14 rounded-[16px] text-[15px] font-semibold bg-slate-50 border border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-600 hover:text-blue-600 transition-all duration-200 group flex items-center justify-center";
+  const SOCIAL_BTN_CLASSES = "w-full h-14 rounded-[16px] bg-white border border-slate-200 text-slate-700 font-semibold hover:border-blue-600 hover:-translate-y-[2px] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center";
+
   const fadeVariants = {
     initial: { opacity: 0, x: 10, scale: 0.98 },
     animate: { opacity: 1, x: 0, scale: 1 },
@@ -203,14 +220,14 @@ export default function SignupPage() {
       </div>
       
       <div className="grid grid-cols-2 gap-3 mb-2.5">
-        <Button variant="outline" type="button" onClick={() => { document.cookie = `oauth_role=${activeTab}; path=/; max-age=300;`; signIn("google", { callbackUrl: callbackUrl || "/api/auth/success" }); }} className="w-full h-11 rounded-2xl border-slate-200 text-slate-700 font-semibold hover:bg-slate-50">
-          <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4" fill="currentColor">
+        <Button variant="outline" type="button" onClick={() => { document.cookie = `oauth_role=${activeTab}; path=/; max-age=300;`; signIn("google", { callbackUrl: callbackUrl || "/api/auth/success" }); }} className={SOCIAL_BTN_CLASSES}>
+          <svg role="img" viewBox="0 0 24 24" className="mr-2 h-[18px] w-[18px]" fill="currentColor">
             <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
           </svg>
           Google
         </Button>
-        <Button variant="outline" type="button" onClick={() => { document.cookie = `oauth_role=${activeTab}; path=/; max-age=300;`; signIn("github", { callbackUrl: callbackUrl || "/api/auth/success" }); }} className="w-full h-11 rounded-2xl border-slate-200 text-slate-700 font-semibold hover:bg-slate-50">
-          <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4" fill="currentColor">
+        <Button variant="outline" type="button" onClick={() => { document.cookie = `oauth_role=${activeTab}; path=/; max-age=300;`; signIn("github", { callbackUrl: callbackUrl || "/api/auth/success" }); }} className={SOCIAL_BTN_CLASSES}>
+          <svg role="img" viewBox="0 0 24 24" className="mr-2 h-[18px] w-[18px]" fill="currentColor">
             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
           </svg>
           GitHub
@@ -218,6 +235,14 @@ export default function SignupPage() {
       </div>
     </>
   );
+
+  if (status === "authenticated") {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col lg:flex-row font-sans overflow-hidden bg-white">
@@ -419,38 +444,38 @@ export default function SignupPage() {
                             )}
                             <div className="grid grid-cols-2 gap-3">
                               <div className="grid gap-1.5">
-                                <Label htmlFor="first-name" className="text-xs text-slate-500 font-medium ml-1">First name</Label>
-                                <div className="relative">
-                                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Label htmlFor="first-name" className={LABEL_CLASSES}>First name</Label>
+                                <div className="relative group">
+                                  <div className={ICON_WRAPPER_CLASSES}><User className={ICON_CLASSES} /></div>
                                   <Input 
                                     id="first-name" 
                                     placeholder="Jane" 
                                     value={firstName}
                                     onChange={(e) => setFirstName(e.target.value)}
                                     required={activeTab === 'jobseeker'}
-                                    className="pl-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl transition-all duration-200"
+                                    className={`pl-12 ${INPUT_CLASSES}`}
                                   />
                                 </div>
                               </div>
                               <div className="grid gap-1.5">
-                                <Label htmlFor="last-name" className="text-xs text-slate-500 font-medium ml-1">Last name</Label>
-                                <div className="relative">
-                                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Label htmlFor="last-name" className={LABEL_CLASSES}>Last name</Label>
+                                <div className="relative group">
+                                  <div className={ICON_WRAPPER_CLASSES}><User className={ICON_CLASSES} /></div>
                                   <Input 
                                     id="last-name" 
                                     placeholder="Smith" 
                                     value={lastName}
                                     onChange={(e) => setLastName(e.target.value)}
                                     required={activeTab === 'jobseeker'}
-                                    className="pl-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl transition-all duration-200"
+                                    className={`pl-12 ${INPUT_CLASSES}`}
                                   />
                                 </div>
                               </div>
                             </div>
                             <div className="grid gap-1.5">
-                              <Label htmlFor="email" className="text-xs text-slate-500 font-medium ml-1">Email Address</Label>
-                              <div className="relative">
-                                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                              <Label htmlFor="email" className={LABEL_CLASSES}>Email Address</Label>
+                              <div className="relative group">
+                                <div className={ICON_WRAPPER_CLASSES}><Mail className={ICON_CLASSES} /></div>
                                 <Input 
                                   id="email" 
                                   placeholder="jane@google.com" 
@@ -458,14 +483,14 @@ export default function SignupPage() {
                                   value={email}
                                   onChange={(e) => setEmail(e.target.value)}
                                   required={activeTab === 'jobseeker'}
-                                  className="pl-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl transition-all duration-200"
+                                  className={`pl-12 ${INPUT_CLASSES}`}
                                 />
                               </div>
                             </div>
                             <div className="grid gap-1.5">
-                              <Label htmlFor="password" className="text-xs text-slate-500 font-medium ml-1">Password</Label>
-                              <div className="relative">
-                                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                              <Label htmlFor="password" className={LABEL_CLASSES}>Password</Label>
+                              <div className="relative group">
+                                <div className={ICON_WRAPPER_CLASSES}><Lock className={ICON_CLASSES} /></div>
                                 <Input 
                                   id="password" 
                                   type={showPassword ? "text" : "password"} 
@@ -474,25 +499,25 @@ export default function SignupPage() {
                                   onChange={(e) => setPassword(e.target.value)}
                                   required={activeTab === 'jobseeker'}
                                   minLength={8}
-                                  className="pl-10 pr-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl tracking-widest transition-all duration-200"
+                                  className={`pl-12 pr-12 tracking-widest ${INPUT_CLASSES}`}
                                 />
                                 <button 
                                   type="button"
                                   onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
                                 >
-                                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                  {showPassword ? <EyeOff className={ICON_CLASSES} /> : <Eye className={ICON_CLASSES} />}
                                 </button>
                               </div>
                             </div>
-                            <Button className="w-full mt-1.5 h-11 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold shadow-lg shadow-blue-500/30 group transition-all duration-300 hover:-translate-y-0.5" type="submit" disabled={isLoading}>
+                            <Button className={PRIMARY_BTN_CLASSES} type="submit" disabled={isLoading}>
                               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                               Create Account
                               <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                             </Button>
                             
                             <div className="flex flex-col space-y-2.5 mt-2">
-                              <div className="relative">
+                              <div className="relative group">
                                 <div className="absolute inset-0 flex items-center">
                                   <span className="w-full border-t border-slate-200" />
                                 </div>
@@ -506,7 +531,7 @@ export default function SignupPage() {
                                 type="button"
                                 onClick={() => { setError(""); setViewMode("login"); }}
                                 variant="outline"
-                                className="w-full h-11 rounded-2xl text-sm font-semibold border-slate-200 text-slate-700 hover:bg-slate-50 group"
+                                className={SECONDARY_BTN_CLASSES}
                               >
                                 Login as Job Seeker
                                 <ArrowRight className="ml-2 h-4 w-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
@@ -521,7 +546,7 @@ export default function SignupPage() {
                       <div className="grid gap-3">
                         <MentorSignupForm />
                         <div className="flex flex-col space-y-2.5 mt-0">
-                          <div className="relative">
+                          <div className="relative group">
                             <div className="absolute inset-0 flex items-center">
                               <span className="w-full border-t border-slate-200" />
                             </div>
@@ -535,7 +560,7 @@ export default function SignupPage() {
                             type="button"
                             onClick={() => { setError(""); setViewMode("login"); }}
                             variant="outline"
-                            className="w-full h-12 rounded-2xl text-sm font-semibold border-slate-200 text-slate-700 hover:bg-slate-50 group"
+                            className={SECONDARY_BTN_CLASSES}
                           >
                             Login as Mentor
                             <ArrowRight className="ml-2 h-4 w-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
@@ -565,11 +590,11 @@ export default function SignupPage() {
                             </div>
                           )}
                           <div className="grid gap-1.5">
-                            <Label htmlFor="login-email" className="text-xs text-slate-500 font-medium ml-1">
+                            <Label htmlFor="login-email" className={LABEL_CLASSES}>
                               {activeTab === 'mentor' ? "Registered Email" : "Email Address"}
                             </Label>
-                            <div className="relative">
-                              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <div className="relative group">
+                              <div className={ICON_WRAPPER_CLASSES}><Mail className={ICON_CLASSES} /></div>
                               <Input 
                                 id="login-email" 
                                 placeholder="name@example.com" 
@@ -578,13 +603,13 @@ export default function SignupPage() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoFocus
-                                className="pl-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl transition-all duration-200"
+                                className={`pl-12 ${INPUT_CLASSES}`}
                               />
                             </div>
                           </div>
                           <div className="grid gap-1.5">
                             <div className="flex items-center justify-between ml-1">
-                              <Label htmlFor="login-password" className="text-xs text-slate-500 font-medium">Password</Label>
+                              <Label htmlFor="login-password" className={LABEL_CLASSES}>Password</Label>
                               <button 
                                 type="button" 
                                 onClick={() => { setError(""); setViewMode("forgotPassword"); }} 
@@ -593,8 +618,8 @@ export default function SignupPage() {
                                 Forgot Password?
                               </button>
                             </div>
-                            <div className="relative">
-                              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <div className="relative group">
+                              <div className={ICON_WRAPPER_CLASSES}><Lock className={ICON_CLASSES} /></div>
                               <Input 
                                 id="login-password" 
                                 type={showPassword ? "text" : "password"} 
@@ -602,25 +627,25 @@ export default function SignupPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                className="pl-10 pr-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl tracking-widest transition-all duration-200"
+                                className={`pl-12 pr-12 tracking-widest ${INPUT_CLASSES}`}
                               />
                               <button 
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
                               >
-                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                {showPassword ? <EyeOff className={ICON_CLASSES} /> : <Eye className={ICON_CLASSES} />}
                               </button>
                             </div>
                           </div>
-                          <Button className="w-full mt-1.5 h-11 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold shadow-lg shadow-blue-500/30 group transition-all duration-300 hover:-translate-y-0.5" type="submit" disabled={isLoading}>
+                          <Button className={PRIMARY_BTN_CLASSES} type="submit" disabled={isLoading}>
                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Login
                             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                           </Button>
                           
                           <div className="flex flex-col space-y-2.5 mt-2">
-                            <div className="relative">
+                            <div className="relative group">
                               <div className="absolute inset-0 flex items-center">
                                 <span className="w-full border-t border-slate-200" />
                               </div>
@@ -634,7 +659,7 @@ export default function SignupPage() {
                               type="button"
                               onClick={() => { setError(""); setViewMode("signup"); }}
                               variant="outline"
-                              className="w-full h-11 rounded-2xl text-sm font-semibold border-slate-200 text-slate-700 hover:bg-slate-50 group"
+                              className={SECONDARY_BTN_CLASSES}
                             >
                               {activeTab === 'mentor' ? "Apply as Mentor" : "Create Account"}
                               <ArrowRight className="ml-2 h-4 w-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
@@ -672,9 +697,9 @@ export default function SignupPage() {
                             </div>
                           )}
                           <div className="grid gap-1.5">
-                            <Label htmlFor="forgot-email" className="text-xs text-slate-500 font-medium ml-1">Email Address</Label>
-                            <div className="relative">
-                              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Label htmlFor="forgot-email" className={LABEL_CLASSES}>Email Address</Label>
+                            <div className="relative group">
+                              <div className={ICON_WRAPPER_CLASSES}><Mail className={ICON_CLASSES} /></div>
                               <Input 
                                 id="forgot-email" 
                                 placeholder="name@example.com" 
@@ -683,11 +708,11 @@ export default function SignupPage() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoFocus
-                                className="pl-10 h-12 bg-slate-50 border-slate-200 focus-visible:ring-blue-500/50 shadow-sm rounded-2xl transition-all duration-200"
+                                className={`pl-12 ${INPUT_CLASSES}`}
                               />
                             </div>
                           </div>
-                          <Button className="w-full mt-1.5 h-11 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg shadow-slate-900/20 group transition-all duration-300 hover:-translate-y-0.5" type="submit" disabled={isLoading}>
+                          <Button className={PRIMARY_BTN_CLASSES} type="submit" disabled={isLoading}>
                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Send Reset Link
                             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -697,7 +722,7 @@ export default function SignupPage() {
                             type="button"
                             onClick={() => { setError(""); setViewMode("login"); }}
                             variant="ghost"
-                            className="w-full mt-2 h-11 rounded-2xl text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 group"
+                            className={SECONDARY_BTN_CLASSES}
                           >
                             <ArrowLeft className="mr-2 h-4 w-4 text-slate-400 group-hover:text-slate-700 transition-transform group-hover:-translate-x-1" />
                             Back to Login

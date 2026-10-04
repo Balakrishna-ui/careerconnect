@@ -1,26 +1,26 @@
 "use client";
 
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { RescheduleButton } from "@/components/booking/RescheduleButton";
-import { cn } from "@/lib/utils";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Calendar, Video, ArrowRight, Clock, Star, History, Loader2 } from "lucide-react";
-import Image from "next/image";
 import { format } from "date-fns";
-import { LeaveReviewModal } from "@/components/dashboard/LeaveReviewModal";
+import {
+  ArrowRight,
+  RefreshCcw,
+  CheckCircle,
+  TrendingUp,
+  UserPlus,
+  FileText,
+  Loader2,
+  Wallet,
+  ArrowDownRight,
+  Megaphone,
+  Bell,
+  Sparkles,
+} from "lucide-react";
 import useSWR from "swr";
 import { getJobSeekerDashboardRealtime } from "@/actions/realtime-actions";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export function JobSeekerDashboardClient({
   userId,
@@ -35,425 +35,339 @@ export function JobSeekerDashboardClient({
   needsReviewBookings: any[];
   isPremium?: boolean;
 }) {
+  const [portalTab, setPortalTab] = useState<"activity" | "announce">("activity");
+
   const { data } = useSWR(
     `jobseeker-dashboard-${userId}`,
     () => getJobSeekerDashboardRealtime(userId),
     {
       fallbackData: initialData,
-      refreshInterval: 3000, // Poll every 3 seconds
+      refreshInterval: 3000,
     }
   );
 
   const {
     totalSessions,
     completedSessions,
-    amountSpent,
-    upcomingBookings,
-    pastBookings,
+    amountSpent: defaultAmountSpent,
+    upcomingBookings: defaultUpcoming,
     allBookings,
-    profileCompletion,
-    nextStep,
-    recommendedMentors = []
   } = data || initialData;
 
-  const now = new Date();
+  const today = format(new Date(), "EEEE, MMM d");
+
+  // Available Months for Month Selector
+  const availableMonths = useMemo(() => {
+    const monthsMap = new Map<string, string>();
+    const now = new Date();
+    // Always include current month
+    monthsMap.set(format(now, "yyyy-MM"), format(now, "MMMM yyyy"));
+
+    allBookings?.forEach((b: any) => {
+      const d = new Date(b.date || b.startTime);
+      if (!isNaN(d.getTime())) {
+        monthsMap.set(format(d, "yyyy-MM"), format(d, "MMMM yyyy"));
+      }
+    });
+
+    return Array.from(monthsMap.entries()).map(([value, label]) => ({ value, label }));
+  }, [allBookings]);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return format(now, "yyyy-MM");
+  });
+
+  // Calculate stats for selected month from REAL booking/payment data
+  const monthBookings = useMemo(() => {
+    if (!allBookings) return [];
+    return allBookings.filter((b: any) => {
+      const d = new Date(b.date || b.startTime);
+      if (isNaN(d.getTime())) return false;
+      return format(d, "yyyy-MM") === selectedMonth;
+    });
+  }, [allBookings, selectedMonth]);
+
+  const monthAmountSpent = useMemo(() => {
+    return monthBookings
+      .filter((b: any) => b.status === "CONFIRMED" || b.status === "COMPLETED" || b.status === "APPROVED")
+      .reduce((sum: number, b: any) => sum + (b.payment?.amount || b.price || 0), 0);
+  }, [monthBookings]);
+
+  const monthUpcomingSessions = useMemo(() => {
+    const now = new Date();
+    return monthBookings.filter((b: any) => {
+      const end = new Date(b.endTime || b.startTime || b.date);
+      return (b.status === "CONFIRMED" || b.status === "PENDING" || b.status === "APPROVED") && end >= now;
+    }).length;
+  }, [monthBookings]);
+
+  const monthCanceled = useMemo(() => {
+    return monthBookings.filter((b: any) => b.status === "CANCELLED" || b.status === "REJECTED" || b.status === "MISSED").length;
+  }, [monthBookings]);
+
+  // Calculate stats for Mentorship Journey
+  const pendingBookings = allBookings?.filter((b: any) => b.status === "PENDING").length || 0;
+  const approvedBookings = allBookings?.filter((b: any) => b.status === "APPROVED").length || 0;
+  const totalMentors = new Set(allBookings?.map((b: any) => b.mentorId)).size || 0;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <div className="mb-8 flex justify-between items-center">
+    <div className="p-8 max-w-[1400px] mx-auto w-full">
+      {/* Header */}
+      <div className="flex justify-between items-end mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            Welcome back, {firstName} 
-            {isPremium && <Badge className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-0 shadow-sm"><Star className="w-3 h-3 mr-1 fill-current"/> PRO</Badge>}
+          <h1 className="text-[28px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            Welcome back, {firstName}
+            {!data && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-2" />}
           </h1>
-          <p className="text-muted-foreground">Manage your upcoming sessions and career progress.</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Here&apos;s what&apos;s happening with your career today.</p>
         </div>
-        {!data && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
+        <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+          {today}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Card className="shadow-sm border-border/50">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Sessions Booked</p>
-            <h3 className="text-2xl font-bold">{totalSessions}</h3>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm border-border/50">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Upcoming</p>
-            <h3 className="text-2xl font-bold">{upcomingBookings.length}</h3>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm border-border/50">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Completed</p>
-            <h3 className="text-2xl font-bold">{completedSessions}</h3>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm border-border/50">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Spent</p>
-            <h3 className="text-2xl font-bold">₹{(amountSpent / 100).toLocaleString('en-IN')}</h3>
-          </CardContent>
-        </Card>
+      {/* Welcome Banner */}
+      <div className="bg-[#FFF9F5] dark:bg-slate-900 border border-[#FFE8D6] dark:border-slate-800 rounded-2xl p-8 mb-8 relative overflow-hidden">
+        <div className="relative z-10">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Welcome to CareerConnect 🎉</h2>
+          <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-2xl">
+            Get started by finding your first mentor. Schedule meetings, prepare for interviews, and accelerate your career.
+          </p>
+          <Link href="/mentors">
+            <Button className="bg-[#FF6B00] hover:bg-[#E66000] text-white rounded-lg px-6 font-medium shadow-sm h-11">
+              + Find a mentor
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="md:col-span-2 shadow-sm border-none bg-primary/5">
-          <CardHeader className="pb-3">
-            <CardTitle>Profile Completion</CardTitle>
-            <CardDescription>Complete your profile to get better mentor recommendations.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 mb-2">
-              <Progress value={profileCompletion || 0} className="h-2" />
-              <span className="text-sm font-medium">{profileCompletion || 0}%</span>
-            </div>
-            {profileCompletion < 100 && nextStep && (
-              <p className="text-sm text-muted-foreground mb-4">
-                Next step: <Link href="/profile" className="text-primary hover:underline font-medium">{nextStep}</Link>
-              </p>
-            )}
-            {profileCompletion === 100 && (
-               <p className="text-sm text-emerald-600 font-medium mb-4">
-                 Your profile is 100% complete!
-               </p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         
-        <Card className="shadow-sm border-none bg-muted/40">
-          <CardHeader className="pb-3">
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Link href="/mentors" className={cn(buttonVariants({ variant: "outline" }), "w-full justify-start")}>
-              <SearchIcon className="h-4 w-4 mr-2" /> Find a Mentor
-            </Link>
-            <Link href="/dashboard/bookmarks" className={cn(buttonVariants({ variant: "outline" }), "w-full justify-start")}>
-              <BookmarkIcon className="h-4 w-4 mr-2" /> Saved Mentors
-            </Link>
-            <Link href="/pricing" className={cn(buttonVariants({ variant: isPremium ? "outline" : "default" }), "w-full justify-start font-bold", isPremium ? "text-blue-600 border-blue-200" : "bg-blue-600 hover:bg-blue-700")}>
-              <Star className={cn("h-4 w-4 mr-2", isPremium ? "fill-blue-600" : "")} /> {isPremium ? "Manage Subscription" : "Upgrade to Pro"}
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold tracking-tight">Upcoming Sessions</h2>
-              <Link href="/dashboard/sessions" className="text-sm text-primary hover:underline flex items-center">
-                View all <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </div>
-            
-            {upcomingBookings.length === 0 ? (
-              <Card className="overflow-hidden shadow-sm border-border/50 bg-muted/20">
-                <CardContent className="p-10 text-center flex flex-col items-center justify-center">
-                  <Calendar className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
-                  <p className="text-muted-foreground font-medium mb-4">No upcoming sessions scheduled.</p>
-                  <Link href="/mentors" className={cn(buttonVariants({ variant: "default" }))}>
-                    Find a Mentor
-                  </Link>
-                </CardContent>
-              </Card>
-            ) : (
-              upcomingBookings.slice(0, 3).map((booking: any) => {
-                const isLive = new Date() >= new Date(booking.startTime) && new Date() <= new Date(booking.endTime);
-                
-                return (
-                  <Card key={booking.id} className="overflow-hidden shadow-sm border-border/50 mb-4 transition-all hover:shadow-md">
-                    <div className={cn("h-1 w-full", isLive ? "bg-red-500" : (booking.status === "PENDING" ? "bg-amber-400" : "bg-primary"))} />
-                    <CardContent className="p-0">
-                      <div className="flex flex-col sm:flex-row border-b border-border/30">
-                        {/* Left Info Area */}
-                        <div className="p-5 flex-1 flex gap-4">
-                          <div className="h-14 w-14 rounded-full overflow-hidden bg-muted flex-shrink-0 relative border">
-                            {booking.mentor?.image ? (
-                              <Image src={booking.mentor.image} alt={booking.mentor.name} fill className="object-cover" />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center font-bold text-muted-foreground bg-secondary/30">
-                                {booking.mentor?.name?.substring(0, 2).toUpperCase()}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-lg leading-tight">{booking.mentor?.name}</h3>
-                              {isLive && <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold animate-pulse">Live Now</Badge>}
-                              {booking.status === "PENDING" && <Badge variant="outline" className="h-5 px-1.5 text-[10px] uppercase font-bold bg-amber-50 text-amber-600 border-amber-200">Pending Approval</Badge>}
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-2">{booking.mentor?.company ? `${booking.mentor.role} at ${booking.mentor.company}` : booking.mentor?.role}</p>
-                            
-                            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-muted-foreground">
-                              <span className="flex items-center text-foreground/80">
-                                <Calendar className="h-3.5 w-3.5 mr-1" />
-                                {format(new Date(booking.date), 'MMM d, yyyy')}
-                              </span>
-                              <span className="flex items-center text-foreground/80">
-                                <Clock className="h-3.5 w-3.5 mr-1" />
-                                {new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })} - {new Date(booking.endTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}
-                              </span>
-                              <span className="flex items-center text-foreground/80">
-                                <Video className="h-3.5 w-3.5 mr-1" />
-                                1:1 Mentorship Session
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Right Actions Area */}
-                        <div className="p-5 bg-muted/10 sm:border-l border-border/30 flex flex-col justify-center gap-2 sm:w-[200px]">
-                          {booking.meetingLink ? (
-                            <a 
-                              href={booking.meetingLink} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className={cn(buttonVariants({ variant: isLive ? "default" : "secondary" }), "w-full shadow-sm")}
-                            >
-                              <Video className="h-4 w-4 mr-2" /> Join Meeting
-                            </a>
-                          ) : (
-                            <Button className="w-full shadow-sm" variant="secondary" disabled>
-                              <Video className="h-4 w-4 mr-2" /> {booking.status === "PENDING" ? "Link Pending" : "Link Unavailable"}
-                            </Button>
-                          )}
-                          <div className="grid grid-cols-2 gap-2">
-                            <Link href={`/dashboard/bookings/${booking.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-xs")}>
-                              View
-                            </Link>
-                            <RescheduleButton 
-                              bookingId={booking.id}
-                              mentorId={booking.mentorId}
-                              currentDate={new Date(booking.startTime)}
-                              duration={Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60000)}
-                              disabled={booking.rescheduleReq?.status === "PENDING" || isLive}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </section>
-
-          <section className="mt-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold tracking-tight">Recommended Mentors</h2>
-              <Link href="/mentors" className="text-sm text-primary hover:underline flex items-center">
-                Explore all <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </div>
-            
-            {recommendedMentors.length === 0 ? (
-              <Card className="shadow-sm border-border/50 bg-muted/20">
-                <CardContent className="p-8 text-center flex flex-col items-center justify-center">
-                   <Star className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
-                   <p className="text-muted-foreground font-medium">No recommendations yet.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
-                {recommendedMentors.map((mentor: any) => (
-                  <Card key={mentor.id} className="min-w-[260px] max-w-[260px] snap-center shrink-0 border-border/50 hover:shadow-md transition-shadow">
-                    <div className="h-24 bg-muted w-full relative">
-                       {mentor.coverImage ? (
-                         <Image src={mentor.coverImage} alt="Cover" fill className="object-cover" />
-                       ) : (
-                         <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-indigo-100" />
-                       )}
-                    </div>
-                    <CardContent className="p-4 pt-0 relative">
-                       <div className="h-16 w-16 rounded-full border-4 border-background bg-muted absolute -top-8 overflow-hidden flex items-center justify-center font-bold">
-                         {mentor.image ? (
-                           <Image src={mentor.image} alt={mentor.name} fill className="object-cover" />
-                         ) : (
-                           mentor.name.substring(0, 2).toUpperCase()
-                         )}
-                       </div>
-                       <div className="mt-10">
-                         <h3 className="font-bold text-base truncate">{mentor.name}</h3>
-                         <p className="text-xs text-muted-foreground truncate">{mentor.role} {mentor.company && `at ${mentor.company}`}</p>
-                         <div className="flex items-center gap-1 mt-2 text-xs font-medium text-amber-500">
-                           <Star className="h-3.5 w-3.5 fill-amber-500" />
-                           {mentor.rating.toFixed(1)} ({mentor.reviewsCount})
-                         </div>
-                       </div>
-                    </CardContent>
-                    <div className="px-4 pb-4">
-                      <Link href={`/mentors/${mentor.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full text-xs")}>
-                        View Profile
-                      </Link>
-                    </div>
-                  </Card>
-                ))}
+        {/* Mentorship Journey Widget */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-[#FFF2EB] dark:bg-[#FF6B00]/20 rounded-md">
+                <TargetIcon className="w-4 h-4 text-[#FF6B00]" />
               </div>
-            )}
-          </section>
-
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold tracking-tight">Past Sessions</h2>
-              <Link href="/dashboard/bookings" className="text-sm text-primary hover:underline flex items-center">
-                View history <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Mentorship Journey</h3>
             </div>
-            <Card className="shadow-sm border-border/50 overflow-hidden">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>Mentor</TableHead>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pastBookings.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center">
-                        <div className="flex flex-col items-center justify-center text-muted-foreground">
-                          <History className="h-8 w-8 mb-2 opacity-50" />
-                          <p>No past sessions found.</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pastBookings.slice(0, 5).map((booking: any) => {
-                      const amount = booking.payment?.amount ? booking.payment.amount / 100 : 0;
-                      const isCompleted = booking.status === "COMPLETED" || new Date(booking.endTime) < now;
-                      const displayStatus = isCompleted ? "Completed" : booking.status === "CANCELLED" ? "Cancelled" : booking.status === "REJECTED" ? "Rejected" : "Missed";
-                      
-                      return (
-                        <TableRow key={booking.id} className="hover:bg-muted/30">
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="h-8 w-8 rounded-full bg-secondary/30 flex items-center justify-center text-xs font-bold border overflow-hidden">
-                                {booking.mentor?.image ? (
-                                  <Image src={booking.mentor.image} alt="" width={32} height={32} className="object-cover" />
-                                ) : (
-                                  booking.mentor?.name?.substring(0, 2).toUpperCase()
-                                )}
-                              </div>
-                              {booking.mentor?.name || "Mentor"}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">{format(new Date(booking.date), 'MMM d, yyyy')}</div>
-                            <div className="text-xs text-muted-foreground">{new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}</div>
-                          </TableCell>
-                          <TableCell>₹{amount}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={cn(
-                              displayStatus === "Completed" && "bg-emerald-50 text-emerald-600 border-emerald-200",
-                              displayStatus === "Cancelled" && "bg-red-50 text-red-600 border-red-200",
-                              displayStatus === "Rejected" && "bg-red-50 text-red-600 border-red-200",
-                              displayStatus === "Missed" && "bg-amber-50 text-amber-600 border-amber-200",
-                            )}>
-                              {displayStatus}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Link href={`/dashboard/bookings/${booking.id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                                Details
-                              </Link>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
-          </section>
+            <Link href="/dashboard/bookings" className="text-sm font-medium text-[#FF6B00] hover:text-[#E66000] flex items-center transition-colors">
+              View <ArrowRight className="w-4 h-4 ml-1" />
+            </Link>
+          </div>
+          
+          <div className="grid grid-cols-5 gap-4">
+            <StatBox label="Pending" value={pendingBookings} icon={RefreshCcw} />
+            <StatBox label="Approved" value={approvedBookings} icon={CheckCircle} />
+            <StatBox label="Completed" value={completedSessions} icon={FileText} />
+            <StatBox label="Total Sessions" value={totalSessions} icon={TrendingUp} />
+            <StatBox label="Total Mentors" value={totalMentors} icon={UserPlus} />
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {needsReviewBookings.length > 0 && (
-            <Card className="shadow-sm border-amber-200 bg-amber-50/30">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-amber-800 flex items-center gap-2">
-                  <Star className="h-4 w-4 fill-amber-500 text-amber-500" /> Needs Review
-                </CardTitle>
-                <CardDescription className="text-amber-700/80">Leave feedback for your past mentors.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {needsReviewBookings.slice(0, 3).map((booking: any) => (
-                  <div key={booking.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full overflow-hidden bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-xs">
-                        {booking.mentor?.image ? (
-                          <Image src={booking.mentor.image} alt="" width={36} height={36} className="object-cover" />
-                        ) : (
-                          booking.mentor?.name?.substring(0, 2).toUpperCase()
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold">{booking.mentor?.name}</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(booking.date), 'MMM d')} Session</p>
-                      </div>
-                    </div>
-                    <LeaveReviewModal 
-                      bookingId={booking.id} 
-                      mentorId={booking.mentorId} 
-                      mentorName={booking.mentor?.name || "Mentor"} 
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="shadow-sm border-border/50">
-            <CardHeader className="pb-3">
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
-                {allBookings.slice(0, 4).map((booking: any, idx: number) => (
-                  <div key={booking.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-100 text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
-                      <History className="h-4 w-4" />
-                    </div>
-                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-3 rounded border border-slate-200 shadow-sm">
-                      <div className="flex items-center justify-between space-x-2 mb-1">
-                        <div className="font-bold text-slate-900 text-sm">Session {booking.status === "PENDING" ? "Requested" : booking.status === "CONFIRMED" ? "Confirmed" : booking.status === "REJECTED" ? "Rejected" : "Booked"}</div>
-                        <time className="font-medium text-xs text-slate-500">{format(new Date(booking.createdAt), 'MMM d')}</time>
-                      </div>
-                      <div className="text-slate-500 text-xs">with {booking.mentor?.name}</div>
-                    </div>
-                  </div>
-                ))}
-                {allBookings.length === 0 && (
-                  <div className="text-center flex flex-col items-center justify-center py-8 relative z-10 bg-background border rounded-lg border-dashed">
-                    <History className="h-8 w-8 text-muted-foreground/50 mb-3" />
-                    <p className="text-sm font-medium">No recent activity</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Book a session with a mentor to get started.</p>
-                  </div>
-                )}
+        {/* Career Portal Widget */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-[#FFF2EB] dark:bg-[#FF6B00]/20 rounded-md">
+                <GlobeIcon className="w-4 h-4 text-[#FF6B00]" />
               </div>
-            </CardContent>
-          </Card>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Career Portal</h3>
+            </div>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+              <button
+                onClick={() => setPortalTab("activity")}
+                className={cn(
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all",
+                  portalTab === "activity"
+                    ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+              >
+                Activity
+              </button>
+              <button
+                onClick={() => setPortalTab("announce")}
+                className={cn(
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all",
+                  portalTab === "announce"
+                    ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+              >
+                Announce
+              </button>
+            </div>
+          </div>
+          
+          {portalTab === "activity" ? (
+            <div className="grid grid-cols-5 gap-4 animate-in fade-in duration-200">
+              <StatBox label="Messages" value="0" />
+              <StatBox label="Action Needed" value={needsReviewBookings.length} />
+              <StatBox label="Follow-ups" value="0" />
+              <StatBox label="Referrals" value="0" />
+              <StatBox label="Reviews" value={needsReviewBookings.length > 0 ? needsReviewBookings.length : 0} />
+            </div>
+          ) : (
+            <div className="space-y-3 py-1 animate-in fade-in duration-200">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-orange-50/50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40">
+                <div className="p-1.5 bg-orange-100 dark:bg-orange-900/50 text-[#FF6B00] rounded-lg shrink-0 mt-0.5">
+                  <Megaphone className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">Top Mentors Live Q&A</h4>
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">New</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-1">
+                    Join this weekend&apos;s session on breaking into top tier tech companies with verified mentors.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg shrink-0 mt-0.5">
+                  <Bell className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">CareerConnect 2.0 Live</h4>
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">Update</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-1">
+                    Real-time session rescheduling, shared Google Meet links, and instant roadmap generation are active!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* THIS MONTH Section */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4 flex-wrap">
+          <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">THIS MONTH</h3>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-sm rounded-md px-3 py-1 font-medium outline-none cursor-pointer"
+          >
+            {availableMonths.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <Link
+            href="/dashboard/bookings?tab=history"
+            className="text-xs font-semibold text-[#FF6B00] hover:text-[#E66000] flex items-center transition-colors ml-1"
+          >
+            Check Previous <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        {/* Spent */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4 text-slate-600 dark:text-slate-400">
+            <TrendingUp className="w-4 h-4" />
+            <span className="font-medium text-sm">Amount Spent</span>
+          </div>
+          <div className="text-[32px] font-bold text-slate-900 dark:text-white mb-2">₹{monthAmountSpent.toLocaleString("en-IN")}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Total payments this month</div>
+        </div>
+
+        {/* Sessions */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4 text-slate-600 dark:text-slate-400">
+            <Wallet className="w-4 h-4" />
+            <span className="font-medium text-sm">Upcoming Sessions</span>
+          </div>
+          <div className="text-[32px] font-bold text-slate-900 dark:text-white mb-2">{monthUpcomingSessions}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Scheduled for this month</div>
+        </div>
+
+        {/* Expenses */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4 text-slate-600 dark:text-slate-400">
+            <ArrowDownRight className="w-4 h-4 text-red-500" />
+            <span className="font-medium text-sm">Canceled</span>
+          </div>
+          <div className="text-[32px] font-bold text-red-500 mb-2">{monthCanceled}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Canceled or missed sessions</div>
+        </div>
+
+        {/* Money in account */}
+        <div className="bg-[#F0FDF4] dark:bg-emerald-950/30 border border-[#BBF7D0] dark:border-emerald-900 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <Wallet className="w-4 h-4" />
+              <span className="font-medium text-sm">Wallet Balance</span>
+            </div>
+            <Button className="bg-[#FF6B00] hover:bg-[#E66000] text-white rounded-lg px-4 h-8 text-xs font-medium">
+              Top up
+            </Button>
+          </div>
+          <div className="text-[32px] font-bold text-emerald-700 dark:text-emerald-400 mb-2 relative z-10">₹0</div>
+          <div className="text-xs text-emerald-600/80 dark:text-emerald-500/80 relative z-10">Available for future bookings</div>
         </div>
       </div>
     </div>
   );
 }
 
-// Minimal icons specifically for this file
-function SearchIcon(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+function StatBox({ label, value, icon: Icon }: { label: string; value: number | string; icon?: any }) {
+  return (
+    <div className="flex flex-col items-center justify-center border border-slate-100 dark:border-slate-800 rounded-xl py-4 hover:border-slate-200 dark:hover:border-slate-700 transition-colors bg-slate-50/50 dark:bg-slate-800/50">
+      {Icon && <Icon className="w-4 h-4 text-slate-400 dark:text-slate-500 mb-2" />}
+      <div className="text-2xl font-bold text-slate-900 dark:text-white">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-medium mt-1 text-center px-2">{label}</div>
+    </div>
+  );
 }
 
-function BookmarkIcon(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+function TargetIcon(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  );
+}
+
+function GlobeIcon(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      <path d="M2 12h20" />
+    </svg>
+  );
 }

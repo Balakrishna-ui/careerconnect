@@ -8,16 +8,36 @@ interface InsightsSidebarProps {
 }
 
 export function InsightsSidebar({ mentor }: InsightsSidebarProps) {
+  const startOfCurrentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const completedBookings = mentor?.bookings?.filter((b: any) => b.status === "COMPLETED") || [];
+  const sessionsCompletedCount = Math.max(completedBookings.length, mentor?.totalSessions || 0);
+
+  const earningsThisMonth = mentor?.bookings
+    ?.filter((b: any) => (b.status === "COMPLETED" || b.status === "CONFIRMED") && new Date(b.createdAt) >= startOfCurrentMonth)
+    .reduce((sum: number, b: any) => sum + (b.price || 0), 0) || 0;
+
+  const userBookingCounts = new Map<string, number>();
+  mentor?.bookings?.forEach((b: any) => {
+    if (b.userId) {
+      userBookingCounts.set(b.userId, (userBookingCounts.get(b.userId) || 0) + 1);
+    }
+  });
+  const repeatClientsCount = Array.from(userBookingCounts.values()).filter(count => count > 1).length;
+
+  const avgRating = mentor?.reviews?.length > 0
+    ? (mentor.reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / mentor.reviews.length).toFixed(1)
+    : (mentor?.rating ? mentor.rating.toFixed(1) : "0.0");
+
   const metrics = [
-    { icon: Eye, label: "Profile Views", value: mentor.profileViews || 0, color: "text-blue-500", bg: "bg-blue-50" },
-    { icon: Search, label: "Search Appearances", value: mentor.searchAppearances || 0, color: "text-purple-500", bg: "bg-purple-50" },
-    { icon: MousePointerClick, label: "Profile Clicks", value: mentor.profileClicks || 0, color: "text-amber-500", bg: "bg-amber-50" },
-    { icon: Calendar, label: "Bookings", value: mentor.bookings?.length || 0, color: "text-emerald-500", bg: "bg-emerald-50" },
-    { icon: CheckCircle, label: "Sessions Completed", value: mentor.totalSessions || 0, color: "text-green-500", bg: "bg-green-50" },
-    { icon: Star, label: "Average Rating", value: mentor.rating ? mentor.rating.toFixed(1) : "0.0", color: "text-yellow-500", bg: "bg-yellow-50" },
-    { icon: MessageSquare, label: "Response Rate", value: `${mentor.responseRate || 100}%`, color: "text-pink-500", bg: "bg-pink-50" },
-    { icon: IndianRupee, label: "Earnings This Month", value: `₹${mentor.earningsThisMonth || 0}`, color: "text-indigo-500", bg: "bg-indigo-50" },
-    { icon: Users, label: "Repeat Clients", value: "0", color: "text-orange-500", bg: "bg-orange-50" },
+    { icon: Eye, label: "Profile Views", value: mentor?.profileViews || 0, color: "text-blue-500", bg: "bg-blue-50" },
+    { icon: Search, label: "Search Appearances", value: mentor?.searchAppearances || 0, color: "text-purple-500", bg: "bg-purple-50" },
+    { icon: MousePointerClick, label: "Profile Clicks", value: mentor?.profileClicks || 0, color: "text-amber-500", bg: "bg-amber-50" },
+    { icon: Calendar, label: "Bookings", value: mentor?.bookings?.length || 0, color: "text-emerald-500", bg: "bg-emerald-50" },
+    { icon: CheckCircle, label: "Sessions Completed", value: sessionsCompletedCount, color: "text-green-500", bg: "bg-green-50" },
+    { icon: Star, label: "Average Rating", value: avgRating, color: "text-yellow-500", bg: "bg-yellow-50" },
+    { icon: MessageSquare, label: "Response Rate", value: `${mentor?.responseRate || 100}%`, color: "text-pink-500", bg: "bg-pink-50" },
+    { icon: IndianRupee, label: "Earnings This Month", value: `₹${earningsThisMonth}`, color: "text-indigo-500", bg: "bg-indigo-50" },
+    { icon: Users, label: "Repeat Clients", value: repeatClientsCount, color: "text-orange-500", bg: "bg-orange-50" },
   ];
 
   return (

@@ -2,6 +2,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { prisma } from "@/lib/prisma";
+import { razorpay } from "@/lib/razorpay";
+import { pusherServer } from "@/lib/pusher";
+import { revalidatePath } from "next/cache";
 import {
   addDays,
   startOfDay,
@@ -12,6 +15,9 @@ import {
   parseISO,
 } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { BookingStateMachine } from "@/lib/booking-state";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,131 +86,78 @@ export async function getAvailableDates(
   sessionDuration: number = 60,
   userTimeZone: string = "UTC"
 ): Promise<AvailableDate[]> {
-  // Fetch mentor settings
-  const settings = await prisma.mentorSettings.findUnique({
-    where: { mentorId },
-  });
+  try {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const targetMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
 
-  const advanceDays = settings?.advanceBookingWindow ?? 60;
-  const noticePeriodHours = settings?.noticePeriod ?? 24;
-  const bufferTime = settings?.bufferTime ?? 15;
-  const maxPerDay = settings?.maxSessionsPerDay ?? 8;
+    const [mentor, blockedDates] = await Promise.all([
+      prisma.mentor.findUnique({
+        where: { id: mentorId },
+        include: { settings: true, weeklySchedules: true },
+      }),
+      prisma.blockedDate.findMany({
+        where: {
+          mentorId,
+          date: {
+            gte: new Date(year, month, 1),
+            lte: new Date(year, month, daysInMonth, 23, 59, 59),
+          },
+        },
+      }),
+    ]);
 
-  // Fetch weekly schedules
-  const weeklySchedules = await prisma.weeklySchedule.findMany({
-    where: { mentorId, isAvailable: true },
-  });
+    const blockedSet = new Set(
+      blockedDates.map((bd) => format(new Date(bd.date), "yyyy-MM-dd"))
+    );
 
-  if (weeklySchedules.length === 0) return [];
+    let weeklySchedules = mentor?.weeklySchedules?.filter((ws: any) => ws.isAvailable) || [];
+    if (weeklySchedules.length === 0) {
+      weeklySchedules = [1, 2, 3, 4, 5].map((d) => ({
+        id: `default-${d}`,
+        mentorId: mentorId,
+        dayOfWeek: d,
+        startTime: "09:00",
+        endTime: "18:00",
+        isAvailable: true,
+      })) as any;
+    }
 
-  // Build a lookup: dayOfWeek -> schedule
-  const scheduleByDay = new Map<
-    number,
-    { startTime: string; endTime: string }
-  >();
-  weeklySchedules.forEach((ws) =>
-    scheduleByDay.set(ws.dayOfWeek, {
-      startTime: ws.startTime,
-      endTime: ws.endTime,
-    })
-  );
+    const availableDaysOfWeek = new Set(weeklySchedules.map((ws) => ws.dayOfWeek));
+    const result: AvailableDate[] = [];
 
-  // Date range: today + noticePeriod ... today + advanceDays
-  const now = new Date();
-  const earliestDate = addDays(
-    startOfDay(now),
-    Math.ceil(noticePeriodHours / 24)
-  );
-  const latestDate = addDays(startOfDay(now), advanceDays);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateObj = new Date(year, month, day);
+      const dow = dateObj.getDay();
+      const dateStr = `${targetMonthPrefix}-${String(day).padStart(2, "0")}`;
 
-  // Month boundaries
-  const monthStart = new Date(year, month, 1);
-  const monthEnd = new Date(year, month + 1, 0); // last day of month
-
-  // Effective range
-  const rangeStart = isBefore(monthStart, earliestDate)
-    ? earliestDate
-    : monthStart;
-  const rangeEnd = isBefore(latestDate, monthEnd) ? latestDate : monthEnd;
-
-  if (isBefore(rangeEnd, rangeStart)) return [];
-
-  // Fetch blocked dates in range
-  const blockedDates = await prisma.blockedDate.findMany({
-    where: {
-      mentorId,
-      date: {
-        gte: rangeStart,
-        lte: rangeEnd,
-      },
-    },
-  });
-
-  const blockedSet = new Set(
-    blockedDates.map((bd) => format(new Date(bd.date), "yyyy-MM-dd"))
-  );
-
-  // Fetch existing bookings in range to count per-day
-  const bookings = await prisma.booking.findMany({
-    where: {
-      mentorId,
-      status: { in: ["PENDING", "CONFIRMED"] },
-      date: {
-        gte: rangeStart,
-        lte: rangeEnd,
-      },
-    },
-  });
-
-  // Count bookings per date
-  const bookingsPerDate = new Map<string, number>();
-  bookings.forEach((b) => {
-    const key = format(new Date(b.date), "yyyy-MM-dd");
-    bookingsPerDate.set(key, (bookingsPerDate.get(key) ?? 0) + 1);
-  });
-
-  // Iterate each day in range
-  const result: AvailableDate[] = [];
-  let cursor = new Date(rangeStart);
-
-  while (!isBefore(rangeEnd, cursor)) {
-    const dateStr = format(cursor, "yyyy-MM-dd");
-    const dow = cursor.getDay(); // 0=Sun
-
-    // Check if schedule exists for this day
-    const sched = scheduleByDay.get(dow);
-
-    if (sched && !blockedSet.has(dateStr)) {
-      // Calculate slots for this day
-      const dayBookingCount = bookingsPerDate.get(dateStr) ?? 0;
-
-      if (dayBookingCount < maxPerDay) {
-        // Calculate how many slots fit
-        const [sh, sm] = sched.startTime.split(":").map(Number);
-        const [eh, em] = sched.endTime.split(":").map(Number);
-        const startMins = sh * 60 + sm;
-        const endMins = eh * 60 + em;
-        const slotBlock = sessionDuration + bufferTime;
-        const totalSlots = Math.floor((endMins - startMins) / slotBlock);
-        const remainingSlots = Math.max(
-          0,
-          Math.min(totalSlots, maxPerDay) - dayBookingCount
-        );
-
-        if (remainingSlots > 0) {
-          result.push({
-            date: dateStr,
-            dayOfWeek: dow,
-            slotsCount: remainingSlots,
-          });
-        }
+      if (availableDaysOfWeek.has(dow) && !blockedSet.has(dateStr)) {
+        result.push({
+          date: dateStr,
+          dayOfWeek: dow,
+          slotsCount: 6,
+        });
       }
     }
 
-    cursor = addDays(cursor, 1);
+    return result;
+  } catch (err) {
+    console.error("Error in getAvailableDates:", err);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const targetMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const result: AvailableDate[] = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateObj = new Date(year, month, day);
+      const dow = dateObj.getDay();
+      if (dow >= 1 && dow <= 5) {
+        result.push({
+          date: `${targetMonthPrefix}-${String(day).padStart(2, "0")}`,
+          dayOfWeek: dow,
+          slotsCount: 6,
+        });
+      }
+    }
+    return result;
   }
-
-  return result;
 }
 
 // ─── Get Available Time Slots for a Specific Date ────────────────────────────
@@ -215,104 +168,124 @@ export async function getAvailableSlots(
   sessionDuration: number = 60,
   userTimeZone: string = "UTC"
 ): Promise<TimeSlot[]> {
-  const date = parseISO(dateStr); // "YYYY-MM-DD"
-  const dayOfWeek = date.getDay();
+  try {
+    const date = parseISO(dateStr); // "YYYY-MM-DD"
+    const dayOfWeek = date.getDay();
 
-  // Fetch settings & schedule
-  const mentor = await prisma.mentor.findUnique({
-    where: { id: mentorId },
-    include: { settings: true, weeklySchedules: true },
-  });
+    const [mentor, blockedDate, existingBookings] = await Promise.all([
+      prisma.mentor.findUnique({
+        where: { id: mentorId },
+        include: { settings: true, weeklySchedules: true },
+      }),
+      prisma.blockedDate.findFirst({
+        where: {
+          mentorId,
+          date: {
+            gte: startOfDay(date),
+            lt: addDays(startOfDay(date), 1),
+          },
+        },
+      }),
+      prisma.booking.findMany({
+        where: {
+          mentorId,
+          status: { in: ["PENDING", "CONFIRMED", "AWAITING_PAYMENT"] },
+          date: {
+            gte: startOfDay(date),
+            lt: addDays(startOfDay(date), 1),
+          },
+          NOT: {
+            status: "AWAITING_PAYMENT",
+            createdAt: { lt: new Date(Date.now() - 15 * 60 * 1000) }, // Stale abandoned payments (>15m) are ignored
+          },
+        },
+      }),
+    ]);
 
-  if (!mentor || !mentor.weeklySchedules) return [];
-
-  const settings = mentor.settings;
-  const bufferTime = settings?.bufferTime ?? 15;
-
-  // Get schedule for this day of week
-  const schedule = mentor.weeklySchedules.find((s: any) => s.dayOfWeek === dayOfWeek);
-
-  if (!schedule || !schedule.isAvailable) return [];
-
-  // Get existing bookings for this date
-  const dayStart = startOfDay(date);
-  const dayEnd = addDays(dayStart, 1);
-
-  const existingBookings = await prisma.booking.findMany({
-    where: {
-      mentorId,
-      status: { in: ["PENDING", "CONFIRMED"] },
-      date: {
-        gte: dayStart,
-        lt: dayEnd,
-      },
-    },
-  });
-
-  // Parse booked time ranges
-  const bookedRanges = existingBookings.map((b) => ({
-    start: format(new Date(b.startTime), "HH:mm"),
-    end: format(new Date(b.endTime), "HH:mm"),
-  }));
-
-  const [sh, sm] = schedule.startTime.split(":").map(Number);
-  const [eh, em] = schedule.endTime.split(":").map(Number);
-  
-  const mentorTimeZone = mentor.timezone || "UTC";
-
-  // Mentor's slot times are stored as strings (e.g. "09:00") in the mentor's timezone.
-  // We construct the start/end Date objects in the mentor's timezone.
-  const mentorBaseStr = `${format(date, "yyyy-MM-dd")}T${schedule.startTime}:00`;
-  const mentorEndStr = `${format(date, "yyyy-MM-dd")}T${schedule.endTime}:00`;
-  
-  // Convert mentor's local time string to UTC Date
-  let currentUTC = fromZonedTime(mentorBaseStr, mentorTimeZone);
-  const endUTC = fromZonedTime(mentorEndStr, mentorTimeZone);
-
-  const slots: TimeSlot[] = [];
-
-  while (true) {
-    const slotEndUTC = addMinutes(currentUTC, sessionDuration);
-
-    if (isBefore(endUTC, slotEndUTC) && !isEqual(endUTC, slotEndUTC)) break;
-
-    // Convert slot UTC time to user's timezone for display
-    const slotStartUser = toZonedTime(currentUTC, userTimeZone);
-    const slotEndUser = toZonedTime(slotEndUTC, userTimeZone);
-    
-    // Check if the slot belongs to the requested date in the user's timezone
-    if (format(slotStartUser, "yyyy-MM-dd") !== dateStr) {
-      // Move to next slot (session + buffer)
-      currentUTC = addMinutes(currentUTC, sessionDuration + bufferTime);
-      continue;
+    // If date is explicitly blocked by mentor, no slots are available
+    if (blockedDate) {
+      return [];
     }
 
-    const slotStartStr = format(slotStartUser, "HH:mm");
-    const slotEndStr = format(slotEndUser, "HH:mm");
+    let weeklySchedules = mentor?.weeklySchedules?.filter((ws: any) => ws.isAvailable) || [];
+    if (weeklySchedules.length === 0) {
+      weeklySchedules = [1, 2, 3, 4, 5].map((d) => ({
+        id: `default-${d}`,
+        mentorId: mentorId,
+        dayOfWeek: d,
+        startTime: "09:00",
+        endTime: "18:00",
+        isAvailable: true,
+      })) as any;
+    }
 
-    // Check overlaps (bookedRanges are in UTC from DB)
-    const isBooked = existingBookings.some((booked) => {
-       return currentUTC < booked.endTime && slotEndUTC > booked.startTime;
+    const schedule = weeklySchedules.find((s: any) => s.dayOfWeek === dayOfWeek);
+    if (!schedule || !schedule.isAvailable) return [];
+
+    const duration = Math.max(15, Number(sessionDuration) || 60);
+    const bufferTime = mentor?.settings?.bufferTime ?? 0;
+    const stepMinutes = Math.min(30, duration); // 30-min grid alignment
+
+    const [startH, startM] = (schedule.startTime || "09:00").split(":").map(Number);
+    const [endH, endM] = (schedule.endTime || "18:00").split(":").map(Number);
+
+    const scheduleStartMinutes = startH * 60 + startM;
+    const scheduleEndMinutes = endH * 60 + endM;
+
+    const candidateSlots: { start: string; end: string; startUtc: Date; endUtc: Date }[] = [];
+
+    for (let cur = scheduleStartMinutes; cur + duration <= scheduleEndMinutes; cur += (duration >= 60 ? 60 : 30)) {
+      const slotStartH = Math.floor(cur / 60);
+      const slotStartM = cur % 60;
+      const slotEndH = Math.floor((cur + duration) / 60);
+      const slotEndM = (cur + duration) % 60;
+
+      const startStr = `${String(slotStartH).padStart(2, "0")}:${String(slotStartM).padStart(2, "0")}`;
+      const endStr = `${String(slotEndH).padStart(2, "0")}:${String(slotEndM).padStart(2, "0")}`;
+
+      const slotStartUtc = fromZonedTime(`${dateStr}T${startStr}:00`, userTimeZone);
+      const slotEndUtc = addMinutes(slotStartUtc, duration);
+
+      candidateSlots.push({
+        start: startStr,
+        end: endStr,
+        startUtc: slotStartUtc,
+        endUtc: slotEndUtc,
+      });
+    }
+
+    const now = new Date();
+
+    const slots: TimeSlot[] = candidateSlots.map((cand) => {
+      // 1. Past time check: Slot must be in future
+      const isPast = isBefore(cand.startUtc, now);
+
+      // 2. Interval overlap check with existing active bookings
+      const hasConflict = existingBookings.some((b) => {
+        const bStart = new Date(b.startTime);
+        const bEnd = new Date(b.endTime);
+        return bStart < cand.endUtc && bEnd > cand.startUtc;
+      });
+
+      return {
+        start: cand.start,
+        end: cand.end,
+        available: !isPast && !hasConflict,
+      };
     });
 
-    slots.push({
-      start: slotStartStr,
-      end: slotEndStr,
-      available: !isBooked,
-    });
-
-    // Move to next slot (session + buffer)
-    currentUTC = addMinutes(currentUTC, sessionDuration + bufferTime);
+    return slots;
+  } catch (err) {
+    console.error("Error in getAvailableSlots:", err);
+    return [];
   }
-
-  return slots;
 }
 
 // ─── Create a Booking ────────────────────────────────────────────────────────
 
 export async function createBooking(data: {
   mentorId: string;
-  userId: string;
+  userId?: string;
   serviceId: string;
   dateStr: string; // "YYYY-MM-DD"
   startTime: string; // "HH:mm"
@@ -322,7 +295,14 @@ export async function createBooking(data: {
   message?: string;
   resumeUrl?: string;
 }) {
-  const { mentorId, userId, serviceId, dateStr, startTime, userTimeZone = "UTC", goal, experience, message, resumeUrl } = data;
+  const { mentorId, serviceId, dateStr, startTime, userTimeZone = "UTC", goal, experience, message, resumeUrl } = data;
+
+  // Verify authenticated session
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return { success: false, error: "Authentication required to book a session." };
+  }
+  const authenticatedUserId = session.user.id;
 
   // Get service
   const service = await prisma.sessionType.findUnique({
@@ -330,14 +310,6 @@ export async function createBooking(data: {
   });
   if (!service || service.mentorId !== mentorId) {
     return { success: false, error: "Invalid service selected." };
-  }
-
-  // Verify slot is still available
-  const slots = await getAvailableSlots(mentorId, dateStr, service.duration, userTimeZone);
-  const slot = slots.find((s) => s.start === startTime && s.available);
-
-  if (!slot) {
-    return { success: false, error: "This time slot is no longer available." };
   }
 
   // Get mentor
@@ -350,6 +322,10 @@ export async function createBooking(data: {
     return { success: false, error: "Mentor not found." };
   }
 
+  if (mentor.applicationStatus !== "VERIFIED") {
+    return { success: false, error: "This mentor is not verified and cannot accept bookings." };
+  }
+
   const sessionDuration = service.duration;
   
   // Construct the booked time in UTC based on the user's timezone selection
@@ -357,59 +333,113 @@ export async function createBooking(data: {
   const bookingStart = fromZonedTime(userDateTimeStr, userTimeZone);
   const bookingEnd = addMinutes(bookingStart, sessionDuration);
 
-  // Create booking + payment in a transaction
-  const booking = await prisma.booking.create({
-    data: {
-      userId,
-      mentorId,
-      date: startOfDay(bookingStart),
-      startTime: bookingStart,
-      endTime: bookingEnd,
-      status: "AWAITING_PAYMENT",
-      price: service.price,
-      goal,
-      experience,
-      message,
-      resumeUrl,
-    },
-  });
-
-  // Force test mode for testing phase
-  const isTestMode = true; // process.env.NEXT_PUBLIC_PAYMENT_MODE === "test";
-  let razorpayOrderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
-  
-  if (!isTestMode) {
-    try {
-      const { razorpay } = require("@/lib/razorpay");
-      const order = await razorpay.orders.create({
-        amount: service.price * 100,
-        currency: "INR",
-        receipt: booking.id
-      });
-      razorpayOrderId = order.id;
-    } catch (error) {
-      console.error("Razorpay order creation failed (falling back to mock ID):", error);
-    }
-  } else {
-    console.log("[Test Mode] Payment bypassed for order creation.");
-    razorpayOrderId = `test_order_${Date.now()}`;
+  // Server-side past time protection
+  if (isBefore(bookingStart, new Date())) {
+    return { success: false, error: "Cannot book a time slot in the past. Please select a future time slot." };
   }
 
-  await prisma.payment.create({
-    data: {
-      bookingId: booking.id,
-      amount: service.price,
-      status: "PENDING",
-      razorpayOrderId,
-    },
-  });
+  try {
+    let orderId: string | null = null;
+    const initialStatus = service.price <= 0 ? "PENDING" : "AWAITING_PAYMENT";
 
-  return {
-    success: true,
-    bookingId: booking.id,
-    razorpayOrderId,
-    amount: service.price,
-  };
+    // 1. Atomic conflict check + creation inside an interactive transaction with PostgreSQL Advisory Lock
+    const booking = await prisma.$transaction(async (tx) => {
+      // 1. Acquire transaction-level advisory lock on the mentor to serialize concurrent slot reservations for this mentor
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${mentorId}))`;
+
+      // 2. Check for overlapping active bookings for the same mentor
+      const conflict = await tx.booking.findFirst({
+        where: {
+          mentorId,
+          status: { in: ["AWAITING_PAYMENT", "PENDING", "CONFIRMED"] },
+          startTime: { lt: bookingEnd },
+          endTime: { gt: bookingStart },
+          NOT: {
+            status: "AWAITING_PAYMENT",
+            createdAt: { lt: new Date(Date.now() - 15 * 60 * 1000) }, // Stale abandoned payments (>15m) are ignored
+          },
+        },
+      });
+
+      if (conflict) {
+        throw new Error("This time slot was just booked by another user. Please choose another slot.");
+      }
+
+      // 3. Create the booking record
+      const createdBooking = await tx.booking.create({
+        data: {
+          userId: authenticatedUserId,
+          mentorId,
+          date: startOfDay(bookingStart),
+          startTime: bookingStart,
+          endTime: bookingEnd,
+          status: initialStatus,
+          price: service.price,
+          sessionTitle: service.title,
+          goal,
+          experience,
+          message,
+          resumeUrl,
+        },
+      });
+
+      // 4. Create initial payment record atomically
+      await tx.payment.create({
+        data: {
+          bookingId: createdBooking.id,
+          amount: service.price,
+          currency: "INR",
+          status: service.price <= 0 ? "SUCCESS" : "PENDING",
+        },
+      });
+
+      return createdBooking;
+    }, { maxWait: 10000, timeout: 20000 });
+
+    // 2. External Payment Order Initialization (Executed outside the DB transaction)
+    if (service.price <= 0) {
+      orderId = `free_${booking.id}`;
+    } else {
+      try {
+        const receipt = `rcpt_${booking.id.slice(0, 16)}_${Date.now().toString().slice(-8)}`;
+        const order = await razorpay.orders.create({
+          amount: service.price * 100,
+          currency: "INR",
+          receipt,
+          notes: {
+            bookingId: booking.id,
+            userId: authenticatedUserId,
+            mentorId,
+          },
+        });
+        orderId = order.id;
+      } catch (error) {
+        console.warn("Razorpay API call failed during order creation, using fallback reference:", error);
+        orderId = `order_${booking.id.slice(0, 12)}_${Date.now()}`;
+      }
+    }
+
+    // 3. Update payment with the generated order ID
+    if (orderId) {
+      await prisma.payment.updateMany({
+        where: { bookingId: booking.id },
+        data: { razorpayOrderId: orderId },
+      });
+    }
+
+    return {
+      success: true,
+      bookingId: booking.id,
+      razorpayOrderId: orderId,
+      amount: service.price,
+    };
+  } catch (error: any) {
+    console.error("createBooking error:", error);
+    return {
+      success: false,
+      error: error?.message || "Failed to create booking.",
+    };
+  }
 }
 
 // ─── Confirm Booking (after payment) ─────────────────────────────────────────
@@ -420,46 +450,84 @@ export async function confirmBooking(data: {
 }) {
   const { bookingId, razorpayPaymentId } = data;
 
-  // Generate a mock meeting link
-  const meetingLink = `https://meet.google.com/sas-${bookingId.slice(0, 4)}-${bookingId.slice(4, 8)}`;
-
-  // Update booking
-  const booking = await prisma.booking.update({
+  const existingBooking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    data: {
-      status: "PENDING", // PENDING Mentor Approval
-    },
-    include: {
-      mentor: true,
-    },
+    include: { mentor: true },
   });
 
-  // Update payment
-  await prisma.payment.update({
-    where: { bookingId },
-    data: {
-      razorpayPaymentId,
-      status: "SUCCESS",
-    },
-  });
+  if (!existingBooking) {
+    return { success: false, error: "Booking not found." };
+  }
 
-  // Update mentor total sessions
-  await prisma.mentor.update({
-    where: { id: booking.mentorId },
-    data: { totalSessions: { increment: 1 } },
-  });
+  // Idempotent: If already confirmed or pending approval, return current state
+  if (existingBooking.status === "PENDING" || existingBooking.status === "CONFIRMED") {
+    return {
+      success: true,
+      booking: JSON.parse(JSON.stringify(existingBooking)),
+      meetingLink: existingBooking.meetingLink || "Pending Mentor Approval",
+    };
+  }
 
-  // Create notification
-  await prisma.notification.create({
-    data: {
-      bookingId,
-      userId: booking.userId,
-      mentorId: booking.mentorId,
-      type: "EMAIL",
-      message: `Your booking request with ${booking.mentor.name} has been sent and is awaiting approval.`,
-      status: "SENT",
-    },
-  });
+  // Validate state machine transition
+  try {
+    BookingStateMachine.validateTransition(existingBooking.status, "PENDING");
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  // Execute database updates atomically in an interactive transaction
+  const booking = await prisma.$transaction(async (tx) => {
+    // 1. Update booking status
+    const updatedBooking = await tx.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: "PENDING", // PENDING Mentor Approval
+      },
+      include: {
+        mentor: true,
+      },
+    });
+
+    // 2. Update payment status
+    await tx.payment.update({
+      where: { bookingId },
+      data: {
+        razorpayPaymentId,
+        status: "SUCCESS",
+      },
+    });
+
+    // 3. Update mentor total sessions
+    await tx.mentor.update({
+      where: { id: updatedBooking.mentorId },
+      data: { totalSessions: { increment: 1 } },
+    });
+
+    // 4. Create notification for job seeker
+    await tx.notification.create({
+      data: {
+        bookingId,
+        userId: updatedBooking.userId,
+        mentorId: updatedBooking.mentorId,
+        type: "EMAIL",
+        message: `Your booking request with ${updatedBooking.mentor.name} has been sent and is awaiting approval.`,
+        status: "SENT",
+      },
+    });
+
+    return updatedBooking;
+  }, { maxWait: 10000, timeout: 20000 });
+
+  // Trigger Pusher event to alert the mentor in real-time
+  try {
+    await pusherServer.trigger(
+      `mentor-${booking.mentorId}`,
+      "new-booking",
+      { bookingId: booking.id }
+    );
+  } catch (err) {
+    console.error("Pusher trigger failed:", err);
+  }
 
   return {
     success: true,
@@ -471,80 +539,159 @@ export async function confirmBooking(data: {
 // ─── Mentor Lifecycle Actions ────────────────────────────────────────────────
 
 export async function acceptBooking(bookingId: string, meetingLink: string, meetingInstructions?: string) {
-  const booking = await prisma.booking.update({
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== "MENTOR") {
+    return { success: false, error: "Unauthorized. Mentor login required." };
+  }
+
+  const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    data: {
-      status: "CONFIRMED",
-      meetingLink,
-      meetingInstructions,
-    },
-    include: { user: true, mentor: true }
+    include: { mentor: true, user: true },
   });
 
-  await prisma.notification.create({
-    data: {
-      bookingId,
-      userId: booking.userId,
-      type: "BOOKING_ACCEPTED",
-      message: `🎉 Your booking with ${booking.mentor.name} has been accepted!`,
-    },
-  });
+  if (!booking || booking.mentor.userId !== session.user.id) {
+    return { success: false, error: "Booking not found or unauthorized." };
+  }
+
+  // Idempotency: If already confirmed, return success
+  if (booking.status === "CONFIRMED") {
+    return { success: true };
+  }
+
+  try {
+    BookingStateMachine.validateTransition(booking.status, "CONFIRMED");
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+
+  const finalMeetingLink = meetingLink || `https://meet.google.com/sas-${bookingId.slice(0, 4)}-${bookingId.slice(4, 8)}`;
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: "CONFIRMED",
+        meetingLink: finalMeetingLink,
+        meetingInstructions: meetingInstructions || null,
+      },
+      include: { user: true, mentor: true }
+    });
+
+    await tx.notification.create({
+      data: {
+        bookingId,
+        userId: updated.userId,
+        type: "BOOKING_ACCEPTED",
+        message: `🎉 Your booking with ${updated.mentor.name} has been accepted!`,
+      },
+    });
+
+    return updated;
+  }, { maxWait: 10000, timeout: 20000 });
 
   return { success: true };
 }
 
 export async function rejectBooking(bookingId: string) {
-  const booking = await prisma.booking.update({
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== "MENTOR") {
+    return { success: false, error: "Unauthorized. Mentor login required." };
+  }
+
+  const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    data: { status: "REJECTED" },
-    include: { user: true, mentor: true }
+    include: { mentor: true, user: true },
   });
 
-  await prisma.notification.create({
-    data: {
-      bookingId,
-      userId: booking.userId,
-      type: "BOOKING_REJECTED",
-      message: `Your booking request with ${booking.mentor.name} was declined.`,
-    },
-  });
+  if (!booking || booking.mentor.userId !== session.user.id) {
+    return { success: false, error: "Booking not found or unauthorized." };
+  }
 
-  // Handle Refund Logic in the future
+  // Idempotency: If already rejected, return success
+  if (booking.status === "REJECTED") {
+    return { success: true };
+  }
+
+  try {
+    BookingStateMachine.validateTransition(booking.status, "REJECTED");
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.booking.update({
+      where: { id: bookingId },
+      data: { status: "REJECTED" },
+      include: { user: true, mentor: true }
+    });
+
+    await tx.notification.create({
+      data: {
+        bookingId,
+        userId: updated.userId,
+        type: "BOOKING_REJECTED",
+        message: `Your booking request with ${updated.mentor.name} was declined.`,
+      },
+    });
+
+    return updated;
+  }, { maxWait: 10000, timeout: 20000 });
 
   return { success: true };
 }
 
 export async function completeSession(bookingId: string, notes: { performance: number, communication: number, problemSolving: number, weakness: string, strength: string, recommendation: string }) {
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: "COMPLETED" },
-  });
-
-  await prisma.sessionNote.create({
-    data: {
-      bookingId,
-      ...notes,
-    }
-  });
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== "MENTOR") {
+    return { success: false, error: "Unauthorized. Mentor login required." };
+  }
 
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    include: { mentor: true }
+    include: { mentor: true },
   });
 
-  if (booking) {
-    await prisma.notification.create({
+  if (!booking || booking.mentor.userId !== session.user.id) {
+    return { success: false, error: "Booking not found or unauthorized." };
+  }
+
+  // Idempotency: If already completed, return success
+  if (booking.status === "COMPLETED") {
+    return { success: true };
+  }
+
+  try {
+    BookingStateMachine.validateTransition(booking.status, "COMPLETED");
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.booking.update({
+      where: { id: bookingId },
+      data: { status: "COMPLETED" },
+      include: { mentor: true }
+    });
+
+    await tx.sessionNote.create({
       data: {
         bookingId,
-        userId: booking.userId,
-        mentorId: booking.mentorId,
+        ...notes,
+      }
+    });
+
+    await tx.notification.create({
+      data: {
+        bookingId,
+        userId: updated.userId,
+        mentorId: updated.mentorId,
         type: "SESSION_COMPLETED",
-        message: `Your session with ${booking.mentor.name} has been completed. Check out their notes and generate your AI roadmap!`,
+        message: `Your session with ${updated.mentor.name} has been completed. Check out their notes and generate your AI roadmap!`,
         actionUrl: `/dashboard/bookings/${bookingId}`,
         status: "PENDING",
       }
     });
-  }
+  }, { maxWait: 10000, timeout: 20000 });
 
   return { success: true };
 }
@@ -552,13 +699,35 @@ export async function completeSession(bookingId: string, notes: { performance: n
 // ─── Cancel Booking ──────────────────────────────────────────────────────────
 
 export async function cancelBooking(bookingId: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return { success: false, error: "Unauthorized. Please sign in." };
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    include: { payment: true },
+    include: { payment: true, mentor: true },
   });
 
   if (!booking) {
     return { success: false, error: "Booking not found." };
+  }
+
+  // Authorization check: Only booked user or mentor can cancel
+  if (booking.userId !== session.user.id && booking.mentor.userId !== session.user.id) {
+    return { success: false, error: "Unauthorized to cancel this booking." };
+  }
+
+  // Idempotency: If already cancelled, return success
+  if (booking.status === "CANCELLED") {
+    return { success: true, message: "Booking is already cancelled.", refunded: false };
+  }
+
+  // State machine validation
+  try {
+    BookingStateMachine.validateTransition(booking.status, "CANCELLED");
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 
   // Check 24h cancellation policy
@@ -568,28 +737,30 @@ export async function cancelBooking(bookingId: string) {
 
   const refundable = hoursUntilSession >= 24;
 
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: "CANCELLED" },
-  });
-
-  if (refundable && booking.payment) {
-    await prisma.payment.update({
-      where: { id: booking.payment.id },
-      data: { status: "REFUNDED" },
+  await prisma.$transaction(async (tx) => {
+    await tx.booking.update({
+      where: { id: bookingId },
+      data: { status: "CANCELLED" },
     });
-  }
 
-  await prisma.notification.create({
-    data: {
-      bookingId,
-      userId: booking.userId,
-      mentorId: booking.mentorId,
-      type: "BOOKING_CANCELLED",
-      message: `A booking on ${booking.date.toDateString()} was cancelled.`,
-      status: "PENDING",
+    if (refundable && booking.payment) {
+      await tx.payment.update({
+        where: { id: booking.payment.id },
+        data: { status: "REFUNDED" },
+      });
     }
-  });
+
+    await tx.notification.create({
+      data: {
+        bookingId,
+        userId: booking.userId,
+        mentorId: booking.mentorId,
+        type: "BOOKING_CANCELLED",
+        message: `A booking on ${booking.date.toDateString()} was cancelled.`,
+        status: "PENDING",
+      }
+    });
+  }, { maxWait: 10000, timeout: 20000 });
 
   return { success: true, refunded: refundable };
 }
@@ -601,7 +772,7 @@ export async function getTestUser() {
   return user ? JSON.parse(JSON.stringify(user)) : null;
 }
 
-export async function createPendingBooking(data: { mentorId: string; date: string; time: string; duration: number; price: number }) {
+export async function createPendingBooking(data: { mentorId: string; date: string; time: string; duration: number; price: number; title?: string }) {
   // const session = await getServerSession(authOptions);
   // if (!session || !session.user?.premium) {
   //   throw new Error("Premium required to book");
@@ -626,6 +797,7 @@ export async function createPendingBooking(data: { mentorId: string; date: strin
       endTime,
       status: "PENDING",
       price: data.price,
+      sessionTitle: data.title || "1:1 Mentorship Session",
       payment: {
         create: {
           amount: data.price,
@@ -641,6 +813,17 @@ export async function createPendingBooking(data: { mentorId: string; date: strin
       }
     }
   });
+
+  // Trigger Pusher event to alert the mentor in real-time
+  try {
+    await pusherServer.trigger(
+      `mentor-${data.mentorId}`,
+      "new-booking",
+      { bookingId: booking.id }
+    );
+  } catch (err) {
+    console.error("Pusher trigger failed:", err);
+  }
 
   return { success: true, bookingId: booking.id };
 }
@@ -748,4 +931,81 @@ export async function generateSessionSummary(bookingId: string) {
     summary: JSON.parse(JSON.stringify(summary)), 
     tasks: JSON.parse(JSON.stringify(createdTasks)) 
   };
+}
+
+// ─── Get Realtime Job Seeker Bookings ─────────────────────────────────────────
+
+export async function getJobSeekerBookingsAction(userId?: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    const targetUserId = userId || session?.user?.id;
+    if (!targetUserId) return [];
+
+    // Transition any past uncompleted confirmed sessions to MISSED
+    const now = new Date();
+    try {
+      await prisma.booking.updateMany({
+        where: {
+          userId: targetUserId,
+          status: "CONFIRMED",
+          endTime: { lt: now },
+        },
+        data: {
+          status: "MISSED",
+        },
+      });
+    } catch (err) {
+      console.error("Failed to auto-transition missed bookings:", err);
+    }
+
+    const bookings = await prisma.booking.findMany({
+      where: { userId: targetUserId },
+      include: {
+        mentor: true,
+        rescheduleReq: true,
+        cancellationReq: true,
+        payment: true,
+      },
+      orderBy: {
+        startTime: "desc",
+      },
+    });
+
+    return bookings.map((b) => ({
+      id: b.id,
+      mentorId: b.mentorId,
+      mentorName: b.mentor?.name || "Mentor",
+      mentorImage: b.mentor?.image || null,
+      mentorRole: b.mentor?.role || "Mentor",
+      mentorCompany: b.mentor?.company || "Independent",
+      sessionTitle: b.sessionTitle || "1:1 Mentorship Session",
+      date: b.date ? new Date(b.date).toISOString() : new Date().toISOString(),
+      startTime: b.startTime ? new Date(b.startTime).toISOString() : new Date().toISOString(),
+      endTime: b.endTime ? new Date(b.endTime).toISOString() : new Date().toISOString(),
+      status: b.status,
+      price: b.price,
+      meetingLink: b.meetingLink,
+      rescheduleReq: b.rescheduleReq
+        ? {
+            id: b.rescheduleReq.id,
+            status: b.rescheduleReq.status,
+            requestedDate: b.rescheduleReq.requestedDate ? new Date(b.rescheduleReq.requestedDate).toISOString() : new Date().toISOString(),
+            requestedTime: b.rescheduleReq.requestedTime ? new Date(b.rescheduleReq.requestedTime).toISOString() : new Date().toISOString(),
+            reason: b.rescheduleReq.reason,
+          }
+        : null,
+      cancellationReq: b.cancellationReq
+        ? {
+            id: b.cancellationReq.id,
+            status: b.cancellationReq.status,
+            reason: b.cancellationReq.reason,
+            refundAmount: b.cancellationReq.refundAmount,
+            createdAt: b.cancellationReq.createdAt ? new Date(b.cancellationReq.createdAt).toISOString() : new Date().toISOString(),
+          }
+        : null,
+    }));
+  } catch (error) {
+    console.error("getJobSeekerBookingsAction error:", error);
+    return [];
+  }
 }

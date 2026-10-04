@@ -41,7 +41,7 @@ export function LeaveReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className={buttonVariants({ size: "sm", variant: "outline", className: "h-8 border-amber-200 text-amber-700 hover:bg-amber-50" })}>
+      <DialogTrigger className={buttonVariants({ size: "sm", className: "h-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-none" })}>
         Review
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">

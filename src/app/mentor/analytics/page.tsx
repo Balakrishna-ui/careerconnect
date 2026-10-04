@@ -21,7 +21,16 @@ export default async function AnalyticsPage() {
 
   // Fetch some real stats or calculate them
   // For now, we will query total earnings and counts.
-  const mentorId = session.user.id;
+  const userMentor = await prisma.mentor.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true, profileViews: true }
+  });
+
+  if (!userMentor) {
+    return <div className="p-8 text-center text-muted-foreground">Mentor profile not found. Please complete your profile.</div>;
+  }
+
+  const mentorId = userMentor.id;
   
   const allBookings = await prisma.booking.findMany({
     where: { mentorId },
@@ -108,7 +117,7 @@ export default async function AnalyticsPage() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Profile Views</p>
-                <h3 className="text-3xl font-bold text-foreground mt-2">128</h3>
+                <h3 className="text-3xl font-bold text-foreground mt-2">{userMentor.profileViews}</h3>
               </div>
               <div className="p-3 bg-purple-100 text-purple-600 rounded-xl">
                 <Users className="w-5 h-5" />

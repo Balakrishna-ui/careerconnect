@@ -6,8 +6,8 @@ import { LeftProfileSidebar } from "@/components/mentor/sidebar/LeftProfileSideb
 export function ProfileLayoutClient({ children, mentor, stats }: { children: React.ReactNode, mentor: any, stats: any }) {
   return (
     <MentorProfileProvider initialMentor={mentor}>
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <aside className="w-full lg:w-[280px] xl:w-[320px] shrink-0">
+      <div className="flex flex-col lg:flex-row gap-5 xl:gap-6 items-start w-full">
+        <aside className="w-full lg:w-[230px] xl:w-[240px] shrink-0 lg:sticky lg:top-[84px] self-start z-30">
           <LeftProfileSidebar 
             initialMentor={mentor}
             searchViews={stats.searchViews}

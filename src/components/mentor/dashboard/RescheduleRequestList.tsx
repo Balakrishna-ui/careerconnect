@@ -37,9 +37,9 @@ export function RescheduleRequestList({ requests }: { requests: any[] }) {
           id={req.id}
           patientName={req.booking.user.name}
           patientImage={req.booking.user.image}
-          oldDateStr={req.oldDate.toLocaleDateString()}
+          oldDateStr={req.oldDate.toLocaleDateString('en-US')}
           oldTimeStr={req.oldStartTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })}
-          newDateStr={req.requestedDate.toLocaleDateString()}
+          newDateStr={req.requestedDate.toLocaleDateString('en-US')}
           newTimeStr={req.requestedTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })}
           reason={req.reason}
           onApprove={handleApprove}

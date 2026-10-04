@@ -3,11 +3,12 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { calculateProfileCompletion } from "@/lib/mentor-utils";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { MapPin, Briefcase, Phone, Mail, Clock, FileText, Pencil, Plus, GraduationCap, CheckCircle2, Download, Trash2, Calendar, Target } from "lucide-react";
 
-
-import { ProfileHeader } from "@/components/mentor/profile/ProfileHeader";
-import { SectionCards } from "@/components/mentor/profile/SectionCards";
-import { InsightsSidebar } from "@/components/mentor/profile/InsightsSidebar";
+import { MentorProfileClient } from "@/components/mentor/MentorProfileClient";
 
 export default async function MentorProfilePage() {
   const session = await getServerSession(authOptions);
@@ -28,7 +29,9 @@ export default async function MentorProfilePage() {
       documents: true,
       educations: true,
       projects: true,
-      certifications: true, // TS reload
+      certifications: true,
+      bookings: true,
+      reviews: true,
     },
   });
 
@@ -36,25 +39,7 @@ export default async function MentorProfilePage() {
     redirect("/signup?view=login");
   }
 
-  const { score } = calculateProfileCompletion(mentor);
+  const { score: completionPercent } = calculateProfileCompletion(mentor);
 
-  return (
-    <div className="max-w-[1400px] mx-auto space-y-6 pb-20 px-4">
-      <ProfileHeader />
-      
-      <div className="flex flex-col xl:flex-row gap-6">
-        
-        {/* Main Content Area (Editable Sections) */}
-        <div className="flex-1 space-y-6 min-w-0">
-          <SectionCards />
-        </div>
-        
-        {/* Right Sidebar (Insights) */}
-        <div className="hidden xl:block w-80 flex-shrink-0">
-          <InsightsSidebar mentor={mentor} />
-        </div>
-        
-      </div>
-    </div>
-  );
+  return <MentorProfileClient mentor={mentor} completionPercent={completionPercent} />;
 }

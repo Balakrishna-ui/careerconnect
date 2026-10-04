@@ -1,17 +1,42 @@
 "use client";
 
+import { useEffect } from "react";
 import { KPICard } from "@/components/admin/KPICard";
 import { Users, GraduationCap, ShieldCheck, DollarSign, Activity, CalendarDays, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { getAdminKPIs, getAdminRevenueTrend, getUserGrowthTrend, getVerificationStatusStats, getRecentAdminSessions } from "@/actions/admin-dashboard-actions";
+import { getPusherClient } from "@/lib/pusher-client";
+import { toast } from "sonner";
 
 export default function AdminDashboard() {
   const fetcher = <T,>(action: () => Promise<T>) => action();
   const refreshInterval = 10000; // Poll every 10 seconds
+  const { mutate } = useSWRConfig();
+
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe("admin-channel");
+
+    channel.bind("mentor-registered", (data: any) => {
+      toast.info(`New mentor application received from ${data.name}`);
+      mutate("kpis");
+      mutate("pieStats");
+    });
+
+    channel.bind("mentor-status-changed", (data: any) => {
+      mutate("kpis");
+      mutate("pieStats");
+    });
+
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe("admin-channel");
+    };
+  }, [mutate]);
 
   const { data: kpis, isLoading: loadingKpis } = useSWR('kpis', () => fetcher(getAdminKPIs), { refreshInterval });
   const { data: revenueTrend, isLoading: loadingRevenue } = useSWR('revenueTrend', () => fetcher(getAdminRevenueTrend), { refreshInterval });

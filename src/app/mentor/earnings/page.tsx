@@ -109,7 +109,7 @@ export default async function MentorEarningsPage() {
           <CardDescription>Your recent payouts and session earnings.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto pb-4">
             <Table>
               <TableHeader className="bg-muted/30">
                 <TableRow>

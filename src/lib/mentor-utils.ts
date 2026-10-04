@@ -23,18 +23,25 @@ export function calculateProfileCompletion(mentor: any) {
     missingFields.push({ label: "Add About Section", href: "#about", percentage: 10 });
   }
 
-  // Experience 15%
+  // Experience 10%
   if (mentor.experiences && mentor.experiences.length > 0) {
-    score += 15;
+    score += 10;
   } else {
-    missingFields.push({ label: "Add Experience", href: "#experience", percentage: 15 });
+    missingFields.push({ label: "Add Experience", href: "#experience", percentage: 10 });
   }
 
-  // Skills 15%
+  // Skills 10%
   if (mentor.skills && mentor.skills.length > 0) {
-    score += 15;
+    score += 10;
   } else {
-    missingFields.push({ label: "Add Skills", href: "#skills", percentage: 15 });
+    missingFields.push({ label: "Add Skills", href: "#skills", percentage: 10 });
+  }
+
+  // Career & Domain 10%
+  if (mentor.user?.targetDomains || mentor.user?.specializations) {
+    score += 10;
+  } else {
+    missingFields.push({ label: "Add Career Domains", href: "#career", percentage: 10 });
   }
 
   // Education 10%

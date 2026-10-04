@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAdminMentors } from "@/actions/admin-actions";
+import { getAdminMentors, suspendUserAccount, deleteUserAccount } from "@/actions/admin-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Search, Filter, MoreVertical, Shield, Star, Clock, DollarSign, Download, Plus, Loader2 } from "lucide-react";
@@ -15,25 +15,70 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { AdminMentorProfileDialog } from "@/components/admin/AdminMentorProfileDialog";
+import { AdminMentorSessionsDialog } from "@/components/admin/AdminMentorSessionsDialog";
+import { SuspendConfirmationDialog, DeleteConfirmationDialog } from "@/components/admin/ConfirmationDialogs";
+import { toast } from "sonner";
 
 export default function MentorsManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [mentors, setMentors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Dialog State
+  const [selectedMentor, setSelectedMentor] = useState<any>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSessionsOpen, setIsSessionsOpen] = useState(false);
+  const [isSuspendOpen, setIsSuspendOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const data = await getAdminMentors();
+      setMentors(data);
+    } catch (error) {
+      console.error("Failed to load mentors", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await getAdminMentors();
-        setMentors(data);
-      } catch (error) {
-        console.error("Failed to load mentors", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
   }, []);
+
+  const handleSuspend = async () => {
+    if (!selectedMentor) return;
+    setIsActionLoading(true);
+    try {
+      await suspendUserAccount(selectedMentor.userId);
+      toast.success("Account suspended successfully.");
+      setIsSuspendOpen(false);
+      await fetchData(); // Refresh table
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to suspend account.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedMentor) return;
+    setIsActionLoading(true);
+    try {
+      await deleteUserAccount(selectedMentor.userId);
+      toast.success("Account deleted successfully.");
+      setIsDeleteOpen(false);
+      await fetchData(); // Refresh table
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete account.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   const filteredMentors = mentors.filter(
     (m) =>
@@ -157,19 +202,33 @@ export default function MentorsManagement() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>View Full Profile</DropdownMenuItem>
-                            <DropdownMenuItem>View Sessions</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setSelectedMentor(mentor); setIsProfileOpen(true); }}>
+                              View Full Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setSelectedMentor(mentor); setIsSessionsOpen(true); }}>
+                              View Sessions
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {mentor.verificationStatus !== "verified" && (
                               <DropdownMenuItem className="text-emerald-600">Approve Verification</DropdownMenuItem>
                             )}
                             {mentor.accountStatus !== "suspended" ? (
-                              <DropdownMenuItem className="text-amber-600">Suspend Account</DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-amber-600"
+                                onClick={() => { setSelectedMentor(mentor); setIsSuspendOpen(true); }}
+                              >
+                                Suspend Account
+                              </DropdownMenuItem>
                             ) : (
                               <DropdownMenuItem className="text-emerald-600">Activate Account</DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600">Delete User</DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => { setSelectedMentor(mentor); setIsDeleteOpen(true); }}
+                            >
+                              Delete User
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -181,6 +240,36 @@ export default function MentorsManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Dialogs */}
+      <AdminMentorProfileDialog 
+        isOpen={isProfileOpen} 
+        onClose={() => { setIsProfileOpen(false); setSelectedMentor(null); }} 
+        mentorId={selectedMentor?.id || null} 
+      />
+
+      <AdminMentorSessionsDialog 
+        isOpen={isSessionsOpen} 
+        onClose={() => { setIsSessionsOpen(false); setSelectedMentor(null); }} 
+        mentorId={selectedMentor?.id || null} 
+        mentorName={selectedMentor?.name || ""}
+      />
+
+      <SuspendConfirmationDialog 
+        isOpen={isSuspendOpen} 
+        onClose={() => setIsSuspendOpen(false)} 
+        onConfirm={handleSuspend} 
+        isLoading={isActionLoading} 
+        mentorName={selectedMentor?.name || ""} 
+      />
+
+      <DeleteConfirmationDialog 
+        isOpen={isDeleteOpen} 
+        onClose={() => setIsDeleteOpen(false)} 
+        onConfirm={handleDelete} 
+        isLoading={isActionLoading} 
+        mentorName={selectedMentor?.name || ""} 
+      />
     </div>
   );
 }

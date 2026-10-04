@@ -24,24 +24,10 @@ export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  useEffect(() => {
-    if (status === "authenticated" && session?.user?.role) {
-      if (session.user.role === "MENTOR") {
-        router.push("/mentor/dashboard");
-      } else if (session.user.role === "JOB_SEEKER") {
-        router.push("/dashboard");
-      } else if (session.user.role === "ADMIN") {
-        router.push("/admin");
-      }
-    }
-  }, [status, session, router]);
 
-  if (status === "authenticated") {
-    return null; // Don't render landing page while redirecting
-  }
 
   return (
-    <div className="flex flex-col bg-[#FAFBFF] overflow-x-hidden font-sans min-h-screen">
+    <div className="flex flex-col bg-[#FAFBFF] dark:bg-slate-950 overflow-x-hidden font-sans min-h-screen">
       
       {/* Background Decor */}
       <div className="absolute top-0 inset-x-0 h-screen w-full overflow-hidden pointer-events-none z-0">
@@ -49,7 +35,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
         
         {/* Bottom wave curve */}
-        <div className="absolute bottom-0 left-0 right-0 h-[20vh] bg-gradient-to-t from-blue-50/80 to-transparent transform -skew-y-[2deg] origin-bottom-left" />
+        <div className="absolute bottom-0 left-0 right-0 h-[20vh] bg-gradient-to-t from-blue-50/80 dark:from-blue-950/20 to-transparent transform -skew-y-[2deg] origin-bottom-left" />
       </div>
 
       {/* Main Container - Responsive min-height instead of fixed height for mobile overflow prevention */}
@@ -72,7 +58,7 @@ export default function Home() {
         >
           <motion.h1 
             variants={FADE_UP_ANIMATION_VARIANTS}
-            className="text-4xl sm:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-[#111827] tracking-tight leading-[1.05] mb-3 xl:mb-5"
+            className="text-4xl sm:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-[#111827] dark:text-white tracking-tight leading-[1.05] mb-3 xl:mb-5"
           >
             Accelerate Your Career<br />
             With<br />
@@ -83,7 +69,7 @@ export default function Home() {
           
           <motion.p 
             variants={FADE_UP_ANIMATION_VARIANTS}
-            className="text-sm md:text-base text-gray-600 max-w-md xl:max-w-lg mb-5 xl:mb-6 leading-relaxed font-medium"
+            className="text-sm md:text-base text-gray-600 dark:text-slate-300 max-w-md xl:max-w-lg mb-5 xl:mb-6 leading-relaxed font-medium"
           >
             Get 1-on-1 career guidance, mock interviews, and insider company insights directly from experienced mentors at top tech companies.
           </motion.p>
@@ -94,24 +80,24 @@ export default function Home() {
             className="flex flex-col sm:flex-row flex-wrap gap-3 xl:gap-5 mb-6 xl:mb-8"
           >
             <div className="flex items-start gap-2">
-              <div className="mt-1 bg-blue-100 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600" strokeWidth={3} /></div>
+              <div className="mt-1 bg-blue-100 dark:bg-blue-950/60 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600 dark:text-blue-400" strokeWidth={3} /></div>
               <div>
-                <p className="font-bold text-gray-900 text-sm xl:text-base">10,000+</p>
-                <p className="text-xs text-gray-500 font-medium">Career Sessions</p>
+                <p className="font-bold text-gray-900 dark:text-white text-sm xl:text-base">10,000+</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Career Sessions</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <div className="mt-1 bg-blue-100 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600" strokeWidth={3} /></div>
+              <div className="mt-1 bg-blue-100 dark:bg-blue-950/60 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600 dark:text-blue-400" strokeWidth={3} /></div>
               <div>
-                <p className="font-bold text-gray-900 text-sm xl:text-base">500+</p>
-                <p className="text-xs text-gray-500 font-medium">Verified Mentors</p>
+                <p className="font-bold text-gray-900 dark:text-white text-sm xl:text-base">500+</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Verified Mentors</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <div className="mt-1 bg-blue-100 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600" strokeWidth={3} /></div>
+              <div className="mt-1 bg-blue-100 dark:bg-blue-950/60 rounded-full p-1"><CheckCircle2 className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-blue-600 dark:text-blue-400" strokeWidth={3} /></div>
               <div>
-                <p className="font-bold text-gray-900 text-sm xl:text-base">Mentors from</p>
-                <p className="text-xs text-gray-500 font-medium">Google, Microsoft, Amazon</p>
+                <p className="font-bold text-gray-900 dark:text-white text-sm xl:text-base">Mentors from</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Google, Microsoft, Amazon</p>
               </div>
             </div>
           </motion.div>
@@ -138,14 +124,14 @@ export default function Home() {
 
             <Link 
               href="/signup?type=mentor" 
-              className="group flex items-center justify-between sm:justify-start gap-3 bg-white hover:bg-gray-50 text-gray-900 rounded-[1.2rem] p-2.5 xl:p-3 pr-4 xl:pr-5 transition-all duration-300 shadow-lg shadow-gray-200/50 hover:shadow-xl hover:shadow-gray-200/70 border border-gray-100 hover:-translate-y-1 w-full sm:w-auto"
+              className="group flex items-center justify-between sm:justify-start gap-3 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-900 dark:text-white rounded-[1.2rem] p-2.5 xl:p-3 pr-4 xl:pr-5 transition-all duration-300 shadow-lg shadow-gray-200/50 dark:shadow-slate-950/50 hover:shadow-xl hover:shadow-gray-200/70 dark:hover:shadow-slate-950/70 border border-gray-100 dark:border-slate-800 hover:-translate-y-1 w-full sm:w-auto"
             >
-              <div className="bg-gray-100 p-2 xl:p-2.5 rounded-xl">
-                <BriefcaseBusiness className="w-5 h-5 text-gray-700" />
+              <div className="bg-gray-100 dark:bg-slate-800 p-2 xl:p-2.5 rounded-xl">
+                <BriefcaseBusiness className="w-5 h-5 text-gray-700 dark:text-slate-200" />
               </div>
               <div className="flex flex-col items-start pr-2">
-                <p className="font-bold text-sm xl:text-base mb-0.5">Become a Mentor</p>
-                <p className="text-xs font-semibold text-gray-500 flex items-center group-hover:text-gray-900 transition-colors">
+                <p className="font-bold text-sm xl:text-base mb-0.5 text-gray-900 dark:text-white">Become a Mentor</p>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 flex items-center group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                   Get Started <ArrowRight className="w-3 h-3 xl:w-3.5 xl:h-3.5 ml-1 transition-transform group-hover:translate-x-1" />
                 </p>
               </div>
@@ -158,16 +144,16 @@ export default function Home() {
           
           <div className="relative w-full max-w-[600px] aspect-square transform scale-[0.7] lg:scale-[0.75] xl:scale-[0.8]">
             {/* Decorative curved SVG line (approximation) */}
-            <svg className="absolute inset-0 w-full h-full text-indigo-100 -z-10" viewBox="0 0 500 500" preserveAspectRatio="none">
+            <svg className="absolute inset-0 w-full h-full text-indigo-100 dark:text-indigo-950/40 -z-10" viewBox="0 0 500 500" preserveAspectRatio="none">
               <path d="M50,100 Q150,0 300,50 T450,200 T300,400" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="6 6" />
-              <circle cx="50" cy="100" r="6" fill="#e0e7ff" />
-              <circle cx="300" cy="50" r="6" fill="#e0e7ff" />
-              <circle cx="450" cy="200" r="6" fill="#e0e7ff" />
-              <circle cx="300" cy="400" r="6" fill="#e0e7ff" />
+              <circle cx="50" cy="100" r="6" fill="#e0e7ff" className="dark:fill-indigo-900" />
+              <circle cx="300" cy="50" r="6" fill="#e0e7ff" className="dark:fill-indigo-900" />
+              <circle cx="450" cy="200" r="6" fill="#e0e7ff" className="dark:fill-indigo-900" />
+              <circle cx="300" cy="400" r="6" fill="#e0e7ff" className="dark:fill-indigo-900" />
             </svg>
 
             {/* Dotted squares decoration */}
-            <div className="absolute top-[5%] left-[5%] grid grid-cols-4 gap-2 opacity-20 -z-10">
+            <div className="absolute top-[5%] left-[5%] grid grid-cols-4 gap-2 opacity-20 dark:opacity-10 -z-10">
               {Array.from({ length: 16 }).map((_, i) => (
                 <div key={i} className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
               ))}
@@ -195,49 +181,49 @@ export default function Home() {
               </div>
 
               {/* Bottom White Card */}
-              <Link href="/signup?type=mentor" className="absolute top-[45%] left-[40%] w-[260px] lg:w-[300px] aspect-square bg-white rounded-[2rem] p-6 text-gray-900 shadow-2xl shadow-gray-300/50 z-30 flex flex-col justify-center border border-gray-50 hover:scale-105 hover:shadow-gray-300/70 transition-all duration-300 cursor-pointer">
-                <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mb-5">
-                  <BriefcaseBusiness className="w-6 h-6 text-gray-700" />
+              <Link href="/signup?type=mentor" className="absolute top-[45%] left-[40%] w-[260px] lg:w-[300px] aspect-square bg-white dark:bg-slate-900 rounded-[2rem] p-6 text-gray-900 dark:text-white shadow-2xl shadow-gray-300/50 dark:shadow-slate-950/60 z-30 flex flex-col justify-center border border-gray-50 dark:border-slate-800 hover:scale-105 hover:shadow-gray-300/70 dark:hover:shadow-slate-950/80 transition-all duration-300 cursor-pointer">
+                <div className="w-12 h-12 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-5">
+                  <BriefcaseBusiness className="w-6 h-6 text-gray-700 dark:text-slate-200" />
                 </div>
-                <h3 className="text-2xl font-bold mb-3">Become a Mentor</h3>
-                <p className="text-gray-500 text-sm leading-relaxed mb-6">
+                <h3 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white">Become a Mentor</h3>
+                <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
                   Share your expertise, help aspiring professionals accelerate their careers, and get paid.
                 </p>
-                <div className="flex items-center text-sm font-bold text-gray-900 group w-fit">
+                <div className="flex items-center text-sm font-bold text-gray-900 dark:text-white group w-fit">
                   Get Started <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
                 </div>
               </Link>
 
               {/* Floating Badges */}
-              <div className="absolute top-[5%] left-[65%] bg-white rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 flex items-center gap-2 z-40">
-                <div className="bg-amber-100 p-1.5 rounded-full"><Star className="w-4 h-4 text-amber-500 fill-amber-500" /></div>
+              <div className="absolute top-[5%] left-[65%] bg-white dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 dark:shadow-slate-950/50 flex items-center gap-2 z-40">
+                <div className="bg-amber-100 dark:bg-amber-950/60 p-1.5 rounded-full"><Star className="w-4 h-4 text-amber-500 fill-amber-500" /></div>
                 <div>
-                  <p className="text-sm font-bold leading-tight">4.9/5</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Rating</p>
+                  <p className="text-sm font-bold leading-tight text-gray-900 dark:text-white">4.9/5</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Rating</p>
                 </div>
               </div>
 
-              <div className="absolute top-[35%] left-[80%] bg-white rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 flex items-center gap-2 z-40">
-                <div className="bg-blue-100 p-1.5 rounded-full"><Users className="w-4 h-4 text-blue-600" /></div>
+              <div className="absolute top-[35%] left-[80%] bg-white dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 dark:shadow-slate-950/50 flex items-center gap-2 z-40">
+                <div className="bg-blue-100 dark:bg-blue-950/60 p-1.5 rounded-full"><Users className="w-4 h-4 text-blue-600 dark:text-blue-400" /></div>
                 <div>
-                  <p className="text-sm font-bold leading-tight">500+</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Mentors</p>
+                  <p className="text-sm font-bold leading-tight text-gray-900 dark:text-white">500+</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Mentors</p>
                 </div>
               </div>
 
-              <div className="absolute top-[65%] left-[-5%] bg-white rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 flex items-center gap-2 z-40">
-                <div className="bg-indigo-100 p-1.5 rounded-full"><TrendingUp className="w-4 h-4 text-indigo-600" /></div>
+              <div className="absolute top-[65%] left-[-5%] bg-white dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 dark:shadow-slate-950/50 flex items-center gap-2 z-40">
+                <div className="bg-indigo-100 dark:bg-indigo-950/60 p-1.5 rounded-full"><TrendingUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /></div>
                 <div>
-                  <p className="text-sm font-bold leading-tight">10K+</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Sessions</p>
+                  <p className="text-sm font-bold leading-tight text-gray-900 dark:text-white">10K+</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Sessions</p>
                 </div>
               </div>
 
-              <div className="absolute top-[85%] left-[75%] bg-white rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 flex items-center gap-2 z-40">
-                <div className="bg-purple-100 p-1.5 rounded-full"><BarChart3 className="w-4 h-4 text-purple-600" /></div>
+              <div className="absolute top-[85%] left-[75%] bg-white dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-full px-4 py-2 shadow-xl shadow-gray-200/50 dark:shadow-slate-950/50 flex items-center gap-2 z-40">
+                <div className="bg-purple-100 dark:bg-purple-950/60 p-1.5 rounded-full"><BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" /></div>
                 <div>
-                  <p className="text-sm font-bold leading-tight">95%</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Success Rate</p>
+                  <p className="text-sm font-bold leading-tight text-gray-900 dark:text-white">95%</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Success Rate</p>
                 </div>
               </div>
               

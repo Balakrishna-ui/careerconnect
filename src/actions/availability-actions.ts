@@ -2,6 +2,41 @@
 
 import { prisma } from "@/lib/prisma";
 
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+
+// ─── Helper: Verify Mentor Ownership or Admin ────────────────────────────────
+
+async function verifyMentorAccess(mentorId: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+
+  if (session.user.role === "ADMIN") {
+    return { session, isAdmin: true };
+  }
+
+  const mentor = await prisma.mentor.findUnique({
+    where: { id: mentorId },
+    select: { userId: true },
+  });
+
+  if (!mentor || mentor.userId !== session.user.id) {
+    throw new Error("Unauthorized: You do not own this mentor profile");
+  }
+
+  return { session, isAdmin: false };
+}
+
+async function requireAdmin() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== "ADMIN") {
+    throw new Error("Unauthorized: Admin access required");
+  }
+  return session.user;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface WeeklyScheduleItem {
@@ -28,6 +63,8 @@ export interface BlockedDateItem {
 // ─── Get All Mentors (for admin dropdown) ────────────────────────────────────
 
 export async function getAllMentorsForAdmin() {
+  await requireAdmin();
+
   const mentors = await prisma.mentor.findMany({
     select: { id: true, name: true, company: true, role: true },
     orderBy: { name: "asc" },
@@ -65,17 +102,21 @@ export async function updateWeeklySchedule(
   mentorId: string,
   schedules: WeeklyScheduleItem[]
 ) {
-  // Delete existing and recreate
-  await prisma.weeklySchedule.deleteMany({ where: { mentorId } });
+  await verifyMentorAccess(mentorId);
 
-  await prisma.weeklySchedule.createMany({
-    data: schedules.map((s) => ({
-      mentorId,
-      dayOfWeek: s.dayOfWeek,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      isAvailable: s.isAvailable,
-    })),
+  // Delete existing and recreate atomically inside a transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.weeklySchedule.deleteMany({ where: { mentorId } });
+
+    await tx.weeklySchedule.createMany({
+      data: schedules.map((s) => ({
+        mentorId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        isAvailable: s.isAvailable,
+      })),
+    });
   });
 
   return { success: true };
@@ -105,6 +146,8 @@ export async function updateMentorSettings(
   mentorId: string,
   data: MentorSettingsData
 ) {
+  await verifyMentorAccess(mentorId);
+
   await prisma.mentorSettings.upsert({
     where: { mentorId },
     update: data,
@@ -138,6 +181,8 @@ export async function addBlockedDate(
   dateStr: string,
   reason: string
 ) {
+  await verifyMentorAccess(mentorId);
+
   const date = new Date(dateStr + "T00:00:00.000Z");
 
   try {
@@ -153,6 +198,24 @@ export async function addBlockedDate(
 // ─── Remove Blocked Date ─────────────────────────────────────────────────────
 
 export async function removeBlockedDate(id: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+
+  const blockedDate = await prisma.blockedDate.findUnique({
+    where: { id },
+    include: { mentor: true },
+  });
+
+  if (!blockedDate) {
+    return { success: false, error: "Blocked date not found" };
+  }
+
+  if (session.user.role !== "ADMIN" && blockedDate.mentor.userId !== session.user.id) {
+    throw new Error("Unauthorized to remove this blocked date");
+  }
+
   await prisma.blockedDate.delete({ where: { id } });
   return { success: true };
 }
@@ -160,6 +223,8 @@ export async function removeBlockedDate(id: string) {
 // ─── Get Bookings for Admin ──────────────────────────────────────────────────
 
 export async function getAdminBookings(mentorId?: string) {
+  await requireAdmin();
+
   const where = mentorId ? { mentorId } : {};
   const bookings = await prisma.booking.findMany({
     where,

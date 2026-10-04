@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useCallback } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -508,8 +509,8 @@ export default function BookingPageClient({
       });
 
       if (!result.success) {
-        alert(result.error);
         setIsProcessing(false);
+        toast.error(result.error || "Failed to initiate booking");
         return;
       }
 
@@ -537,7 +538,7 @@ export default function BookingPageClient({
           setStep(5);
         } else {
           const verifyData = await verifyRes.json();
-          alert("Test Payment verification failed: " + verifyData.error);
+          toast.error("Payment verification failed: " + (verifyData.error || "Unknown error"));
         }
         setIsProcessing(false);
         return;
@@ -640,31 +641,85 @@ export default function BookingPageClient({
     );
   }
 
+  // HEADER_HEIGHT: Navbar (64px) + Booking header (64px) = 128px total pt
+  const HEADER_OFFSET = "pt-[128px]";
+
   return (
-    <div className="bg-muted/10 min-h-screen pb-24 relative">
-      {/* Force test mode for testing phase */}
-      {true && (
-        <div className="fixed top-20 right-4 z-50 bg-amber-100 text-amber-800 px-3 py-1.5 rounded-full text-xs font-bold border border-amber-300 shadow-md flex items-center gap-1 animate-in slide-in-from-top-2">
-          <span>🧪 Test Mode – Payment Skipped</span>
-        </div>
-      )}
-      {/* Top Navigation */}
-      <div className="bg-background border-b sticky top-16 z-40">
-        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            href={`/mentors/${mentorId}`}
-            className="flex items-center text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Profile
-          </Link>
-          <span className="text-sm text-muted-foreground">
-            Booking with <span className="font-semibold text-foreground">{mentor.name}</span>
-          </span>
+    <div className={`bg-muted/10 min-h-screen pb-24 relative ${HEADER_OFFSET}`}>
+
+      {/* ── Fixed Booking Header ───────────────────────────────────────────── */}
+      <div className="fixed top-16 left-0 right-0 z-[1000] bg-background/95 backdrop-blur-md border-b border-border/60 shadow-sm">
+        <div className="mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4 max-w-7xl">
+
+          {/* LEFT: Back to Profile */}
+          <div className="shrink-0 w-36 sm:w-44">
+            <Link
+              href={`/mentors/${mentorId}`}
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors duration-200 group"
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-muted group-hover:bg-primary/10 transition-colors">
+                <ArrowLeft className="h-4 w-4" />
+              </span>
+              <span className="hidden sm:inline">Back to Profile</span>
+            </Link>
+          </div>
+
+          {/* CENTER: Step Stepper */}
+          <div className="flex-1 flex items-center justify-center overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-0.5 sm:gap-1">
+              {STEPS.map((stepItem, i) => {
+                const Icon = stepItem.icon;
+                const isActive = i === step;
+                const isDone = i < step;
+                return (
+                  <div key={i} className="flex items-center">
+                    <div
+                      className={cn(
+                        "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all duration-300 whitespace-nowrap",
+                        isActive && "bg-primary text-primary-foreground shadow-md shadow-primary/30",
+                        isDone && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+                        !isActive && !isDone && "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      ) : (
+                        <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      )}
+                      <span className="hidden md:inline">{stepItem.label}</span>
+                    </div>
+                    {i < STEPS.length - 1 && (
+                      <div
+                        className={cn(
+                          "w-4 sm:w-6 h-0.5 mx-0.5",
+                          i < step ? "bg-emerald-400" : "bg-border"
+                        )}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* RIGHT: Payment Badge */}
+          <div className="shrink-0 w-36 sm:w-44 flex justify-end">
+            {true /* isTestMode */ ? (
+              <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                🧪 Test Mode
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                <ShieldCheck className="w-3 h-3" /> Secure Pay
+              </span>
+            )}
+          </div>
+
         </div>
       </div>
+      {/* ─────────────────────────────────────────────────────────────────────── */}
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <StepIndicator current={step} />
 
         <div className="flex flex-col lg:flex-row gap-8">
           {/* ── Main Content ── */}
@@ -1135,7 +1190,7 @@ export default function BookingPageClient({
           {/* ── Sidebar ── */}
           {step < 4 && (
             <div className="w-full lg:w-[320px] shrink-0">
-              <div className="sticky top-32">
+              <div className="sticky top-[136px]">
                 <Card className="border-none shadow-xl shadow-primary/5 rounded-2xl overflow-hidden">
                   <CardContent className="p-6">
                     {/* Mentor info */}

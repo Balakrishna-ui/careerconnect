@@ -14,10 +14,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({
+  const booking = await prisma.booking.findFirst({
     where: {
       id: id,
-      userId: session.user.id
+      OR: [
+        { userId: session.user.id },
+        { mentor: { userId: session.user.id } }
+      ]
     },
     include: {
       mentor: true,
@@ -69,13 +72,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         <tbody>
           <tr className="border-b border-gray-100">
             <td className="py-4">
-              <p className="font-semibold">1:1 Mentorship Session with {booking.mentor.name}</p>
+              <p className="font-semibold">{booking.sessionTitle || "1:1 Mentorship Session"} with {booking.mentor.name}</p>
               <p className="text-sm text-gray-500">
                 {format(new Date(booking.date), 'MMMM d, yyyy')} | {new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}
               </p>
             </td>
             <td className="py-4 text-right">
-              ₹{((booking.payment?.amount || booking.price || 0) / 100).toLocaleString('en-IN')}
+              ₹{((booking.payment?.amount || booking.price || 0)).toLocaleString('en-IN')}
             </td>
           </tr>
         </tbody>
@@ -83,7 +86,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           <tr className="border-t-2 border-gray-200">
             <td className="py-4 font-bold text-right text-gray-700">Total:</td>
             <td className="py-4 font-bold text-right text-xl text-primary">
-              ₹{((booking.payment?.amount || booking.price || 0) / 100).toLocaleString('en-IN')}
+              ₹{((booking.payment?.amount || booking.price || 0)).toLocaleString('en-IN')}
             </td>
           </tr>
         </tfoot>

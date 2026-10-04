@@ -6,9 +6,10 @@ import { authOptions } from "@/lib/auth";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
+  if (!session?.user || session.user.role !== "ADMIN") {
+    throw new Error("Unauthorized: Admin access required");
   }
+  return session.user.id;
 }
 
 export async function getAdminAnalyticsData() {

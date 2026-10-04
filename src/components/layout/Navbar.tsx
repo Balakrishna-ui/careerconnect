@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { BriefcaseBusiness, Menu, LogOut, User, X } from "lucide-react"
+import { BriefcaseBusiness, Menu, LogOut, User, X, Crown, ChevronRight, Settings, HelpCircle, LayoutDashboard } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "next-auth/react";
 import { JobSeekerAccountDrawer } from "@/components/layout/JobSeekerAccountDrawer";
@@ -19,12 +19,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session, status } = useSession();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  if (pathname?.startsWith("/admin") || pathname?.includes("/invoice")) {
+  if (pathname?.startsWith("/admin") || pathname?.includes("/invoice") || pathname === "/mentor" || pathname?.startsWith("/mentor/") || pathname?.startsWith("/dashboard")) {
     return null;
   }
 
@@ -66,6 +68,7 @@ export function Navbar() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-3">
+            <ThemeToggle />
             {status === "loading" ? (
               <div className="h-8 w-8 animate-pulse rounded-full bg-muted"></div>
             ) : session ? (
@@ -75,70 +78,116 @@ export function Navbar() {
                   <JobSeekerAccountDrawer session={session} />
                 ) : (
                   <DropdownMenu>
-                  <DropdownMenuTrigger render={
-                    <Button variant="outline" size="sm" className="rounded-full gap-2" />
-                  }>
-                    <User className="h-4 w-4" />
-                    <span className="max-w-[100px] truncate">{session.user?.name?.split(' ')[0]}</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                  
-                  {session.user?.role === "MENTOR" ? (
-                    <>
-                      <DropdownMenuGroup>
-                        <DropdownMenuLabel>Mentor Dashboard</DropdownMenuLabel>
-                      </DropdownMenuGroup>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/mentor/dashboard" className="cursor-pointer w-full" />}>
-                        Overview
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/profile" className="cursor-pointer w-full" />}>
-                        Profile Management
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/session-pricing" className="cursor-pointer w-full" />}>
-                        Session Types & Pricing
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/availability" className="cursor-pointer w-full" />}>
-                        Availability
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/bookings" className="cursor-pointer w-full" />}>
-                        Bookings / Sessions
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/earnings" className="cursor-pointer w-full" />}>
-                        Earnings
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/mentor/reviews" className="cursor-pointer w-full" />}>
-                        Reviews
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/messages" className="cursor-pointer w-full" />}>
-                        Messages
-                      </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/settings" className="cursor-pointer w-full" />}>
-                        Settings
-                      </DropdownMenuItem>
-                    </>
-                  ) : session.user?.role === "ADMIN" ? (
-                    <>
-                      <DropdownMenuGroup>
-                        <DropdownMenuLabel>Admin Panel</DropdownMenuLabel>
-                      </DropdownMenuGroup>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/admin" className="cursor-pointer w-full" />}>
-                        Dashboard
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
+                    <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors">
+                      <User className="h-4 w-4" />
+                      <span className="max-w-[100px] truncate">{session.user?.name?.split(' ')[0]}</span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-80 p-0 rounded-2xl shadow-xl overflow-hidden border border-border">
+                      {/* Top Section */}
+                      <div className="p-4 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
+                        <div className="flex items-center gap-4">
+                          {/* Circular Progress Avatar Placeholder */}
+                          <div className="relative">
+                            <svg className="w-14 h-14 transform -rotate-90">
+                              <circle cx="28" cy="28" r="26" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-muted/30" />
+                              <circle cx="28" cy="28" r="26" stroke="currentColor" strokeWidth="3" fill="transparent" strokeDasharray="164" strokeDashoffset="46" className="text-orange-500" strokeLinecap="round" />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center">
+                                <User className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                              </div>
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 bg-background text-[10px] font-bold text-orange-600 border border-orange-200 rounded-full px-1">
+                              72%
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-base text-foreground leading-tight">{session.user?.name || "User"}</h4>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                              {session.user?.role === "MENTOR" ? "Mentor at CareerConnect" : session.user?.role === "ADMIN" ? "System Administrator" : "Professional"}
+                            </p>
+                            <Link 
+                              href={session.user?.role === "MENTOR" ? "/mentor/profile" : session.user?.role === "JOB_SEEKER" ? "/dashboard/profile" : "/admin"} 
+                              className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1.5 inline-block hover:underline"
+                            >
+                              View & Update Profile
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
 
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    className="cursor-pointer text-red-600 focus:text-red-600"
-                    onClick={() => signOut({ callbackUrl: '/' })}
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                      <div className="px-4 pb-2">
+                        {/* Upgrade Banner */}
+                        <div className="mt-2 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-900/20 border border-orange-100 dark:border-orange-900/50 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow">
+                          <div className="flex items-center gap-2">
+                            <div className="bg-orange-500 rounded-full p-1">
+                               <Crown className="w-3 h-3 text-white" />
+                            </div>
+                            <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Upgrade to Pro</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </div>
+
+                        {/* Profile Performance */}
+                        <div className="mt-4">
+                          <h5 className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 mb-3 flex items-center justify-between">
+                            Your profile performance
+                            <span className="font-normal text-muted-foreground">Last 90 days</span>
+                          </h5>
+                          <div className="grid grid-cols-2 gap-2 text-center bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-border/50">
+                            <div className="border-r border-border/50">
+                              <div className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1">
+                                4 <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1">Search Appearances</p>
+                              <Link href="#" className="text-[10px] text-blue-600 dark:text-blue-400 font-medium hover:underline">View all</Link>
+                            </div>
+                            <div>
+                              <div className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1">
+                                5 <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1">Recruiter Actions</p>
+                              <Link href="#" className="text-[10px] text-blue-600 dark:text-blue-400 font-medium hover:underline">View all</Link>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <DropdownMenuSeparator className="mt-2 opacity-50" />
+                      
+                      <div className="py-1">
+                        <DropdownMenuItem className="cursor-pointer py-2 px-4 focus:bg-accent/50" onClick={() => router.push(session.user?.role === "MENTOR" ? "/mentor/dashboard" : "/dashboard")}>
+                          <LayoutDashboard className="mr-3 h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Dashboard</span>
+                        </DropdownMenuItem>
+                        
+                        {session.user?.role === "ADMIN" && (
+                          <DropdownMenuItem className="cursor-pointer py-2 px-4 focus:bg-accent/50" onClick={() => router.push("/admin")}>
+                            <BriefcaseBusiness className="mr-3 h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">Admin Panel</span>
+                          </DropdownMenuItem>
+                        )}
+
+                        <DropdownMenuItem className="cursor-pointer py-2 px-4 focus:bg-accent/50" onClick={() => router.push("/settings")}>
+                          <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Settings</span>
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuItem className="cursor-pointer py-2 px-4 focus:bg-accent/50" onClick={() => router.push("/faqs")}>
+                          <HelpCircle className="mr-3 h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">FAQs</span>
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuItem
+                          className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30 py-2 px-4"
+                          onClick={() => signOut({ callbackUrl: '/' })}
+                        >
+                          <LogOut className="mr-3 h-4 w-4" />
+                          <span className="text-sm font-medium">Logout</span>
+                        </DropdownMenuItem>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </>
             ) : (
@@ -161,15 +210,18 @@ export function Navbar() {
               </>
             )}
           </div>
-          <Button 
-            variant="outline" 
-            size="icon" 
-            className="md:hidden rounded-lg"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            <span className="sr-only">Toggle Menu</span>
-          </Button>
+          <div className="md:hidden flex items-center gap-2">
+            <ThemeToggle />
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="rounded-lg"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              <span className="sr-only">Toggle Menu</span>
+            </Button>
+          </div>
         </div>
       </div>
       

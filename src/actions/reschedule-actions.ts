@@ -12,12 +12,16 @@ export async function createRescheduleRequest(data: {
   bookingId: string;
   requestedDate: string; // "YYYY-MM-DD"
   requestedTime: string; // "HH:mm"
-  reason?: string;
+  reason: string;
 }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return { success: false, error: "Unauthorized" };
+    }
+
+    if (!data.reason || !data.reason.trim()) {
+      return { success: false, error: "A reason explaining why you need to reschedule is required." };
     }
 
     const booking = await prisma.booking.findUnique({
@@ -36,15 +40,11 @@ export async function createRescheduleRequest(data: {
       return { success: false, error: "Unauthorized to reschedule this booking" };
     }
 
-    if (booking.status !== "CONFIRMED" && booking.status !== "PENDING") {
-      return { success: false, error: "Cannot reschedule a cancelled or completed booking" };
+    if (booking.status === "CANCELLED" || booking.status === "REJECTED") {
+      return { success: false, error: "Cannot reschedule a cancelled or declined booking" };
     }
 
-    if (new Date(booking.startTime) < new Date()) {
-      return { success: false, error: "Cannot reschedule a session that has already started or passed." };
-    }
-
-    // @ts-ignore - Prisma client needs to be re-generated on server restart
+    // Check if a pending reschedule request already exists
     const existingRequest = await prisma.rescheduleRequest.findFirst({
       where: {
         bookingId: booking.id,
@@ -62,8 +62,13 @@ export async function createRescheduleRequest(data: {
     const requestedStart = new Date(date);
     requestedStart.setHours(h, m, 0, 0);
 
-    // Verify slot is available
-    const duration = Math.round((booking.endTime.getTime() - booking.startTime.getTime()) / 60000);
+    // Server-side past time protection
+    if (requestedStart < new Date()) {
+      return { success: false, error: "Cannot reschedule to a past date/time." };
+    }
+
+    // Verify slot is available with the mentor
+    const duration = Math.max(15, Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60000) || 60);
     const slots = await getAvailableSlots(booking.mentorId, data.requestedDate, duration);
     const slot = slots.find((s) => s.start === data.requestedTime && s.available);
 
@@ -71,37 +76,74 @@ export async function createRescheduleRequest(data: {
       return { success: false, error: "The requested time slot is no longer available." };
     }
 
-    const rescheduleReq = await prisma.rescheduleRequest.create({
-      data: {
-        bookingId: booking.id,
-        mentorId: booking.mentorId,
-        jobSeekerId: booking.userId,
-        oldDate: booking.date,
-        oldStartTime: booking.startTime,
-        requestedDate: startOfDay(date),
-        requestedTime: requestedStart,
-        reason: data.reason,
-      },
-    });
+    const requestedEnd = addMinutes(requestedStart, duration);
 
-    // Notify Mentor
-    await prisma.notification.create({
-      data: {
-        bookingId: booking.id,
-        mentorId: booking.mentorId,
-        type: "RESCHEDULE_REQUEST",
-        message: `${booking.user.name} wants to reschedule your session from ${format(new Date(booking.startTime), "PPP 'at' p")} to ${format(new Date(requestedStart), "PPP 'at' p")}.`,
-      },
-    });
+    // Create or update RescheduleRequest and notification atomically inside an interactive transaction with Advisory Lock
+    const rescheduleReq = await prisma.$transaction(async (tx) => {
+      // 1. Acquire transaction-level advisory lock on the mentor
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${booking.mentorId}))`;
+
+      // 2. Re-verify conflict inside the locked transaction
+      const txConflict = await tx.booking.findFirst({
+        where: {
+          mentorId: booking.mentorId,
+          id: { not: booking.id },
+          status: { in: ["PENDING", "CONFIRMED"] },
+          startTime: { lt: requestedEnd },
+          endTime: { gt: requestedStart },
+        },
+      });
+
+      if (txConflict) {
+        throw new Error("This time slot conflicts with another scheduled booking.");
+      }
+
+      const req = await tx.rescheduleRequest.upsert({
+        where: { bookingId: booking.id },
+        create: {
+          bookingId: booking.id,
+          mentorId: booking.mentorId,
+          jobSeekerId: booking.userId,
+          oldDate: booking.date,
+          oldStartTime: booking.startTime,
+          requestedDate: startOfDay(date),
+          requestedTime: requestedStart,
+          reason: data.reason.trim(),
+          status: "PENDING",
+        },
+        update: {
+          oldDate: booking.date,
+          oldStartTime: booking.startTime,
+          requestedDate: startOfDay(date),
+          requestedTime: requestedStart,
+          reason: data.reason.trim(),
+          status: "PENDING",
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          bookingId: booking.id,
+          mentorId: booking.mentorId,
+          userId: booking.userId,
+          type: "RESCHEDULE_REQUEST",
+          message: `${booking.user?.name || "Job Seeker"} requested to reschedule their session to ${format(requestedStart, "PPP 'at' p")}. Reason: ${data.reason.trim()}`,
+        },
+      });
+
+      return req;
+    }, { maxWait: 10000, timeout: 20000 });
 
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/bookings");
     revalidatePath("/mentor/dashboard");
+    revalidatePath("/mentor/bookings");
     revalidatePath(`/dashboard/bookings/${booking.id}`);
 
     return { success: true, rescheduleReq };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create reschedule request:", error);
-    return { success: false, error: "Something went wrong." };
+    return { success: false, error: error?.message || "Something went wrong." };
   }
 }
 
@@ -127,43 +169,68 @@ export async function acceptRescheduleRequest(requestId: string) {
       return { success: false, error: "Request is no longer pending." };
     }
 
-    const duration = Math.round((request.booking.endTime.getTime() - request.booking.startTime.getTime()) / 60000);
-    const newEndTime = addMinutes(request.requestedTime, duration);
+    const duration = Math.max(15, Math.round((new Date(request.booking.endTime).getTime() - new Date(request.booking.startTime).getTime()) / 60000) || 60);
+    const newEndTime = addMinutes(new Date(request.requestedTime), duration);
 
-    // Update Request
-    await prisma.rescheduleRequest.update({
-      where: { id: requestId },
-      data: { status: "ACCEPTED" },
-    });
+    // Atomic transaction with Advisory Lock for conflict check, reschedule acceptance, and booking schedule update
+    await prisma.$transaction(async (tx) => {
+      // 1. Acquire transaction-level advisory lock on the mentor
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.mentorId}))`;
 
-    // Update Booking
-    await prisma.booking.update({
-      where: { id: request.bookingId },
-      data: {
-        date: request.requestedDate,
-        startTime: request.requestedTime,
-        endTime: newEndTime,
-      },
-    });
+      // 2. Re-verify conflict inside the locked transaction
+      const conflict = await tx.booking.findFirst({
+        where: {
+          mentorId: request.mentorId,
+          id: { not: request.bookingId },
+          status: { in: ["PENDING", "CONFIRMED"] },
+          startTime: { lt: newEndTime },
+          endTime: { gt: new Date(request.requestedTime) },
+        },
+      });
 
-    // Notify Job Seeker
-    await prisma.notification.create({
-      data: {
-        bookingId: request.bookingId,
-        userId: request.jobSeekerId,
-        type: "RESCHEDULE_ACCEPTED",
-        message: `Your mentor ${request.booking.mentor.name} accepted your reschedule request. New session: ${format(new Date(request.requestedTime), "PPP 'at' p")}.`,
-      },
-    });
+      if (conflict) {
+        throw new Error("Cannot accept: This slot is now booked by another session.");
+      }
+
+      // 3. Update Request to ACCEPTED
+      await tx.rescheduleRequest.update({
+        where: { id: requestId },
+        data: { status: "ACCEPTED" },
+      });
+
+      // 4. Update Booking with new schedule and CONFIRMED status
+      await tx.booking.update({
+        where: { id: request.bookingId },
+        data: {
+          date: request.requestedDate,
+          startTime: request.requestedTime,
+          endTime: newEndTime,
+          status: "CONFIRMED",
+        },
+      });
+
+      // 5. Notify Job Seeker
+      await tx.notification.create({
+        data: {
+          bookingId: request.bookingId,
+          userId: request.jobSeekerId,
+          mentorId: request.mentorId,
+          type: "RESCHEDULE_ACCEPTED",
+          message: `Your mentor ${request.booking.mentor.name} accepted your reschedule request. New session: ${format(new Date(request.requestedTime), "PPP 'at' p")}.`,
+        },
+      });
+    }, { maxWait: 10000, timeout: 20000 });
 
     revalidatePath("/mentor/dashboard");
+    revalidatePath("/mentor/bookings");
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/bookings");
     revalidatePath(`/dashboard/bookings/${request.bookingId}`);
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to accept reschedule:", error);
-    return { success: false, error: "Failed to accept reschedule" };
+    return { success: false, error: error?.message || "Failed to accept reschedule" };
   }
 }
 
@@ -189,29 +256,33 @@ export async function rejectRescheduleRequest(requestId: string) {
       return { success: false, error: "Request is no longer pending." };
     }
 
-    // Update Request
-    await prisma.rescheduleRequest.update({
-      where: { id: requestId },
-      data: { status: "REJECTED" },
-    });
+    // Atomic transaction for rejection update and notification
+    await prisma.$transaction(async (tx) => {
+      await tx.rescheduleRequest.update({
+        where: { id: requestId },
+        data: { status: "REJECTED" },
+      });
 
-    // Notify Job Seeker
-    await prisma.notification.create({
-      data: {
-        bookingId: request.bookingId,
-        userId: request.jobSeekerId,
-        type: "RESCHEDULE_REJECTED",
-        message: `Your mentor ${request.booking.mentor.name} rejected the reschedule request. Your original session time remains.`,
-      },
-    });
+      await tx.notification.create({
+        data: {
+          bookingId: request.bookingId,
+          userId: request.jobSeekerId,
+          mentorId: request.mentorId,
+          type: "RESCHEDULE_REJECTED",
+          message: `Your mentor ${request.booking.mentor.name} declined the reschedule request.`,
+        },
+      });
+    }, { maxWait: 10000, timeout: 20000 });
 
     revalidatePath("/mentor/dashboard");
+    revalidatePath("/mentor/bookings");
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/bookings");
     revalidatePath(`/dashboard/bookings/${request.bookingId}`);
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to reject reschedule:", error);
-    return { success: false, error: "Failed to reject reschedule" };
+    return { success: false, error: error?.message || "Failed to reject reschedule" };
   }
 }

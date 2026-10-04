@@ -1,4 +1,7 @@
 "use server";
+import { revalidatePath } from "next/cache";
+
+import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -73,6 +76,7 @@ export async function getMentors(filters: MentorFilters = {}) {
       // *** Only show VERIFIED mentors publicly ***
       { applicationStatus: "VERIFIED" },
       { profileCompleted: true },
+      { user: { accountStatus: "ACTIVE" } },
 
       // Text search
       search
@@ -142,18 +146,27 @@ export async function getMentors(filters: MentorFilters = {}) {
 
   const skip = (page - 1) * limit;
 
-  const [mentorsRaw, total] = await Promise.all([
-    prisma.mentor.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limit,
-      include: {
-        skills: true,
-      },
-    }),
-    prisma.mentor.count({ where }),
-  ]);
+  let mentorsRaw: any[] = [];
+  let total = 0;
+
+  try {
+    const results = await Promise.all([
+      prisma.mentor.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          skills: true,
+        },
+      }),
+      prisma.mentor.count({ where }),
+    ]);
+    mentorsRaw = results[0];
+    total = results[1];
+  } catch (error) {
+    console.warn("Database query failed in getMentors (likely quota limit exceeded). Returning empty list.");
+  }
 
   // Map to backward-compatible shape for MentorResultCard
   const mentors = mentorsRaw.map((m) => {
@@ -179,44 +192,62 @@ export async function getMentors(filters: MentorFilters = {}) {
       price: m.price,
       verified: m.applicationStatus === "VERIFIED",
       image: m.image,
+      coverImage: m.coverImage,
       location: m.location ?? "",
       languages: m.languages ?? "",
       remoteAvailable: m.remoteAvailable,
       nextAvailable: m.nextAvailable,
       totalSessions: m.totalSessions,
-      skills: sortedSkills.map((s) => s.name).join(", "),
-      goals: m.skills.filter((s) => s.category === "Areas of Mentorship").map((s) => s.name).join(", "),
+      skills: sortedSkills.map((s: any) => s.name).join(", "),
+      goals: m.skills.filter((s: any) => s.category === "Areas of Mentorship").map((s: any) => s.name).join(", "),
     };
   });
 
   return { mentors: JSON.parse(JSON.stringify(mentors)), total, page, limit };
 }
 
+const getCachedFilterCounts = unstable_cache(
+  async () => {
+    // Only count verified mentors for filters
+    const baseWhere = { applicationStatus: "VERIFIED", profileCompleted: true };
+
+    let companyCounts: any[] = [];
+    let industryCounts: any[] = [];
+    let tierCounts: any[] = [];
+    let locationCounts: any[] = [];
+    let totalVerified = 0;
+
+    try {
+      const results = await Promise.all([
+        prisma.mentor.groupBy({ by: ["company"], where: baseWhere, _count: { _all: true, company: true }, orderBy: { _count: { company: "desc" } }, take: 20 }),
+        prisma.mentor.groupBy({ by: ["industry"], where: baseWhere, _count: { _all: true } }),
+        prisma.mentor.groupBy({ by: ["companyTier"], where: baseWhere, _count: { _all: true } }),
+        prisma.mentor.groupBy({ by: ["location"], where: baseWhere, _count: { _all: true } }),
+        prisma.mentor.count({ where: baseWhere }),
+      ]);
+      companyCounts = results[0];
+      industryCounts = results[1];
+      tierCounts = results[2];
+      locationCounts = results[3];
+      totalVerified = results[4];
+    } catch (error) {
+      console.warn("Database query failed in getCachedFilterCounts. Returning empty counts.");
+    }
+
+    return {
+      companies: companyCounts.map((c) => ({ name: c.company ?? "", count: c._count._all })),
+      industries: industryCounts.map((i) => ({ name: i.industry ?? "", count: i._count._all })),
+      tiers: tierCounts.map((t) => ({ name: t.companyTier, count: t._count._all })),
+      locations: locationCounts.map((l) => ({ name: l.location ?? "", count: l._count._all })),
+      totalVerified,
+    };
+  },
+  ["filter-counts"],
+  { revalidate: 3600 } // Cache for 1 hour
+);
+
 export async function getFilterCounts() {
-  // Only count verified mentors for filters
-  const baseWhere = { applicationStatus: "VERIFIED", profileCompleted: true };
-
-  const [
-    companyCounts,
-    industryCounts,
-    tierCounts,
-    locationCounts,
-    totalVerified,
-  ] = await Promise.all([
-    prisma.mentor.groupBy({ by: ["company"], where: baseWhere, _count: { _all: true, company: true }, orderBy: { _count: { company: "desc" } }, take: 20 }),
-    prisma.mentor.groupBy({ by: ["industry"], where: baseWhere, _count: { _all: true } }),
-    prisma.mentor.groupBy({ by: ["companyTier"], where: baseWhere, _count: { _all: true } }),
-    prisma.mentor.groupBy({ by: ["location"], where: baseWhere, _count: { _all: true } }),
-    prisma.mentor.count({ where: baseWhere }),
-  ]);
-
-  return {
-    companies: companyCounts.map((c) => ({ name: c.company ?? "", count: c._count._all })),
-    industries: industryCounts.map((i) => ({ name: i.industry ?? "", count: i._count._all })),
-    tiers: tierCounts.map((t) => ({ name: t.companyTier, count: t._count._all })),
-    locations: locationCounts.map((l) => ({ name: l.location ?? "", count: l._count._all })),
-    totalVerified,
-  };
+  return getCachedFilterCounts();
 }
 
 export async function getSkillSuggestions(query: string) {
@@ -469,4 +500,111 @@ export async function submitMentorApplication(data: any) {
   });
 
   return { success: true, mentorId: mentor.id };
+}
+
+export async function updateMentorProfileFull(data: any) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  const mentor = await prisma.mentor.findUnique({ where: { userId: session.user.id } });
+  if (!mentor) return { success: false, error: "Mentor profile not found" };
+
+  try {
+    // 1. Update User level details (Base Identity)
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: {
+        name: data.name,
+        email: data.email,
+        mobile: data.mobile,
+        gender: data.gender,
+        dob: data.dob ? new Date(data.dob) : null,
+      }
+    });
+
+    // 2. Update Mentor level details (Professional Identity)
+    const currentRole = data.experiences && data.experiences.length > 0 
+      ? (data.experiences[0].jobTitle || data.experiences[0].designation) 
+      : mentor.role;
+    const currentCompany = data.experiences && data.experiences.length > 0 
+      ? data.experiences[0].companyName 
+      : mentor.company;
+
+    await prisma.mentor.update({
+      where: { id: mentor.id },
+      data: {
+        name: data.name, // Keep synced
+        role: currentRole,
+        company: currentCompany,
+        location: data.location,
+        bio: data.profileSummary,
+        headline: data.headline || mentor.headline,
+        experienceYears: data.experienceLevel ? parseInt(data.experienceLevel) : null,
+        noticePeriod: data.noticePeriod,
+        resumeUrl: data.resumeUrl
+      }
+    });
+
+    // 3. Sync arrays (delete and recreate for simplicity)
+    if (data.skills) {
+      await prisma.skill.deleteMany({ where: { mentorId: mentor.id } });
+      const skillsArray = typeof data.skills === 'string' ? data.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : data.skills;
+      if (skillsArray.length > 0) {
+        await prisma.skill.createMany({
+          data: skillsArray.map((s: string) => ({ mentorId: mentor.id, name: s, category: "Technical" }))
+        });
+      }
+    }
+
+    if (data.experiences && data.experiences.length > 0) {
+      await prisma.experience.deleteMany({ where: { mentorId: mentor.id } });
+      await prisma.experience.createMany({
+        data: data.experiences.map((exp: any) => ({
+          mentorId: mentor.id,
+          companyName: exp.companyName,
+          designation: exp.jobTitle || exp.designation,
+          duration: exp.duration,
+          location: exp.location || ""
+        }))
+      });
+    }
+
+    if (data.educations && data.educations.length > 0) {
+      await prisma.education.deleteMany({ where: { mentorId: mentor.id } });
+      await prisma.education.createMany({
+        data: data.educations.map((edu: any) => ({
+          mentorId: mentor.id,
+          degree: edu.degree,
+          college: edu.college,
+          passingYear: edu.passingYear,
+          branch: edu.branch,
+          collegeTier: edu.collegeTier,
+          scoreType: edu.scoreType,
+          cgpa: edu.cgpa,
+          currentlyStudying: edu.currentlyStudying === true || edu.currentlyStudying === "true"
+        }))
+      });
+    }
+
+    if (data.projects && data.projects.length > 0) {
+      await prisma.project.deleteMany({ where: { mentorId: mentor.id } });
+      await prisma.project.createMany({
+        data: data.projects.map((proj: any) => ({
+          mentorId: mentor.id,
+          title: proj.name,
+          demoUrl: proj.url,
+          description: proj.description
+        }))
+      });
+    }
+
+    // Force revalidation of caches
+    revalidatePath("/mentor/profile");
+    revalidatePath("/mentors");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Failed to update mentor profile:", err);
+    return { success: false, error: err.message };
+  }
 }

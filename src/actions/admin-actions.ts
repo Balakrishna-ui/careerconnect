@@ -16,8 +16,7 @@ async function checkAdmin() {
 }
 
 export async function getAdminDashboardStats() {
-  // Uncomment below when auth is fully enforced
-  // await checkAdmin();
+  await checkAdmin();
 
   const [
     totalUsers,
@@ -65,7 +64,7 @@ export async function getAdminDashboardStats() {
 }
 
 export async function getPendingMentors() {
-  // await checkAdmin();
+  await checkAdmin();
   
   return await prisma.mentor.findMany({
     where: { applicationStatus: "PENDING" },
@@ -80,7 +79,7 @@ export async function getPendingMentors() {
 }
 
 export async function approveMentor(mentorId: string) {
-  const adminId = "dummy-admin"; // await checkAdmin();
+  const adminId = await checkAdmin();
   
   await prisma.$transaction([
     prisma.mentor.update({
@@ -110,7 +109,7 @@ export async function approveMentor(mentorId: string) {
 }
 
 export async function getAdminSessions() {
-  // await checkAdmin();
+  await checkAdmin();
   
   const bookings = await prisma.booking.findMany({
     orderBy: { createdAt: 'desc' },
@@ -140,13 +139,13 @@ export async function getAdminSessions() {
     duration: Math.round((booking.endTime.getTime() - booking.startTime.getTime()) / 60000),
     paymentStatus: booking.payment?.status === "SUCCESS" || booking.payment?.status === "PAID" ? "success" : booking.payment?.status === "REFUNDED" ? "refunded" : booking.payment?.status === "FAILED" ? "failed" : "pending",
     sessionStatus: booking.status === "COMPLETED" ? "completed" : booking.status === "CANCELLED" ? "cancelled" : booking.status === "REJECTED" ? "cancelled" : new Date(booking.startTime) < new Date() && booking.status !== "COMPLETED" ? "no_show" : "scheduled",
-    amount: (booking.payment?.amount || booking.price || 0) / 100,
+    amount: (booking.payment?.amount || booking.price || 0),
     platform: booking.meetingLink ? (booking.meetingLink.includes("zoom") ? "Zoom" : booking.meetingLink.includes("meet") ? "Google Meet" : "Teams") : "TBD"
   }));
 }
 
 export async function rejectMentor(mentorId: string, reason: string) {
-  const adminId = "dummy-admin"; // await checkAdmin();
+  const adminId = await checkAdmin();
   
   await prisma.$transaction([
     prisma.mentor.update({
@@ -167,15 +166,18 @@ export async function rejectMentor(mentorId: string, reason: string) {
 }
 
 export async function getAdminMentors() {
+  await checkAdmin();
   const mentors = await prisma.mentor.findMany({
     include: {
       user: {
         select: {
+          id: true,
           name: true,
           email: true,
           image: true,
           mobile: true,
-          createdAt: true
+          createdAt: true,
+          accountStatus: true
         }
       },
       bookings: {
@@ -192,6 +194,7 @@ export async function getAdminMentors() {
 
   return mentors.map(m => ({
     id: m.id,
+    userId: m.user.id || m.userId,
     name: m.user.name || m.name || "Unknown",
     email: m.user.email || "",
     mobile: m.user.mobile || "N/A",
@@ -199,10 +202,10 @@ export async function getAdminMentors() {
     designation: m.role || "Mentor",
     category: m.industry || "General",
     verificationStatus: m.applicationStatus.toLowerCase(), // "pending", "verified", etc.
-    accountStatus: "active", // Defaulting to active
+    accountStatus: m.user.accountStatus?.toLowerCase() || "active",
     rating: m.rating || 0,
-    sessionsCompleted: m.bookings.filter(b => b.status === "COMPLETED").length,
-    earnings: m.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0) / 100, 0),
+    sessionsCompleted: m.bookings.length,
+    earnings: m.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0), 0),
     joinedAt: m.user.createdAt.toLocaleDateString(),
     image: m.user.image || m.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user.name || "M")}`,
     location: m.location || "Remote"
@@ -210,6 +213,7 @@ export async function getAdminMentors() {
 }
 
 export async function getAdminJobSeekers() {
+  await checkAdmin();
   const users = await prisma.user.findMany({
     where: { 
       role: {
@@ -229,12 +233,99 @@ export async function getAdminJobSeekers() {
     email: u.email || "",
     mobile: u.mobile || "N/A",
     sessionsBooked: u.bookings.length,
-    totalSpend: u.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0) / 100, 0),
-    accountStatus: "active",
+    totalSpend: u.bookings.reduce((acc, b) => acc + (b.payment?.amount || b.price || 0), 0),
+    accountStatus: u.accountStatus?.toLowerCase() || "active",
     joinedAt: u.createdAt.toLocaleDateString(),
     lastActive: u.updatedAt.toLocaleDateString(),
     image: u.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || "U")}`,
     location: "Global",
     targetRole: "Job Seeker"
   }));
+}
+
+export async function suspendUserAccount(userId: string) {
+  const adminId = await checkAdmin();
+  
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: "SUSPENDED" }
+    }),
+    prisma.notification.create({
+      data: {
+        userId,
+        type: "ACCOUNT_SUSPENDED",
+        message: "Your account has been suspended by CareerConnect administration. You currently cannot access mentor features or receive new bookings. Please contact support if you believe this was a mistake."
+      }
+    })
+  ]);
+
+  return { success: true };
+}
+
+export async function deleteUserAccount(userId: string) {
+  const adminId = await checkAdmin();
+  
+  // Attempt to create notification (might fail if email/notification requires user existence, but we do this before delete)
+  try {
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: "ACCOUNT_DELETED",
+        message: "Your CareerConnect account has been permanently deleted by administration."
+      }
+    });
+  } catch (e) {
+    console.error("Failed to notify user before deletion", e);
+  }
+
+  // Delete user (Prisma cascade will handle mentor, bookings, etc.)
+  await prisma.user.delete({
+    where: { id: userId }
+  });
+
+  return { success: true };
+}
+
+export async function getMentorFullProfile(mentorId: string) {
+  await checkAdmin();
+  const mentor = await prisma.mentor.findUnique({
+    where: { id: mentorId },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+          image: true,
+          accountStatus: true
+        }
+      },
+      experiences: true,
+      educations: true,
+      skills: true,
+      projects: true,
+      certifications: true,
+      sessionTypes: true,
+      socialProfiles: true,
+      documents: true
+    }
+  });
+  
+  return mentor;
+}
+
+export async function getMentorBookings(mentorId: string) {
+  await checkAdmin();
+  const bookings = await prisma.booking.findMany({
+    where: { mentorId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: {
+        select: { name: true, email: true, image: true }
+      },
+      payment: true
+    }
+  });
+  
+  return bookings;
 }

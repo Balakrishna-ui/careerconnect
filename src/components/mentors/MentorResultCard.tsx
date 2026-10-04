@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ShieldCheck, Star, Clock, MapPin, Users, Globe, Video, Headphones, MessageSquare, Calendar } from "lucide-react";
+import Image from "next/image";
+import { ShieldCheck, Star, Clock, MapPin, Users, Globe, Video, Headphones, MessageSquare, Calendar, Bookmark } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,8 @@ interface Mentor {
   rating: number;
   reviewsCount: number;
   price: number;
-  verified: boolean;
   image: string | null;
+  coverImage: string | null;
   location: string;
   languages: string;
   remoteAvailable: boolean;
@@ -24,11 +25,15 @@ interface Mentor {
   totalSessions: number;
   skills: string;
   goals: string;
+  verified?: boolean;
 }
 
 interface MentorResultCardProps {
   mentor: Mentor;
   view?: "grid" | "list";
+  isSaved?: boolean;
+  onToggleSave?: (mentorId: string) => Promise<void> | void;
+  isSaving?: boolean;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -66,7 +71,13 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProps) {
+export function MentorResultCard({
+  mentor,
+  view = "grid",
+  isSaved = false,
+  onToggleSave,
+  isSaving = false,
+}: MentorResultCardProps) {
   const skills = mentor.skills.split(", ").filter(Boolean);
   const languages = mentor.languages.split(", ").filter(Boolean);
   const tierColor = TIER_COLORS[mentor.companyTier] ?? "bg-muted text-muted-foreground";
@@ -76,10 +87,14 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
       <div className="bg-card border border-border/60 rounded-xl p-5 flex gap-5 hover:border-primary/30 hover:shadow-md transition-all group">
         {/* Avatar */}
         <div className="relative flex-shrink-0">
-          <img
+          <Image
             src={mentor.image ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(mentor.name)}&background=6366f1&color=fff&size=96`}
             alt={mentor.name}
+            width={80}
+            height={80}
+            priority
             className="w-20 h-20 rounded-xl object-cover border-2 border-background shadow"
+            unoptimized={mentor.image?.includes("ui-avatars") ?? true}
           />
           {mentor.verified && (
             <div className="absolute -bottom-1.5 -right-1.5 bg-background rounded-full p-0.5 shadow">
@@ -120,7 +135,7 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
               <Clock className="w-3.5 h-3.5" /> {mentor.experienceYears} yrs exp
             </div>
             <div className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5" /> {mentor.location}
+              <MapPin className="w-3.5 h-3.5" /> {mentor.location || "Remote"}
             </div>
             <div className="flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5" /> {mentor.totalSessions} sessions
@@ -137,12 +152,12 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
 
           <div className="flex flex-wrap gap-1.5 mt-3">
             {skills.slice(0, 5).map((s) => (
-              <Badge key={s} variant="secondary" className="text-xs bg-muted/60 font-normal px-2 py-0">
+              <Badge key={s} variant="secondary" className="text-xs font-medium px-2 py-0.5">
                 {s}
               </Badge>
             ))}
             {skills.length > 5 && (
-              <Badge variant="secondary" className="text-xs bg-muted/60 font-normal px-2 py-0">
+              <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
                 +{skills.length - 5}
               </Badge>
             )}
@@ -157,13 +172,34 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
                 🟢 {formatNextAvailable(mentor.nextAvailable)}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Link href={`/mentors/${mentor.id}`}>
                 <Button variant="outline" size="sm" className="rounded-lg text-xs">View Profile</Button>
               </Link>
               <Link href={`/mentors/${mentor.id}`}>
-                <Button size="sm" className="rounded-lg text-xs">Book Session</Button>
+                <Button size="sm" className="rounded-lg text-xs bg-blue-600 hover:bg-blue-700 text-white">Book Now</Button>
               </Link>
+              {onToggleSave && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onToggleSave(mentor.id);
+                  }}
+                  disabled={isSaving}
+                  aria-label={isSaved ? "Remove from saved mentors" : "Save mentor"}
+                  title={isSaved ? "Saved" : "Save mentor"}
+                  className={cn(
+                    "h-8 w-8 rounded-lg border flex items-center justify-center transition-all shrink-0 cursor-pointer",
+                    isSaved
+                      ? "bg-orange-50 border-orange-200 text-[#FF6B00] dark:bg-orange-950/30 dark:border-orange-900 dark:text-[#FF6B00]"
+                      : "bg-background border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <Bookmark className={cn("w-3.5 h-3.5 transition-transform active:scale-90", isSaved && "fill-[#FF6B00] text-[#FF6B00]")} />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -174,32 +210,33 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
   // Grid view
   return (
     <div className="bg-card border border-border/60 rounded-2xl overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all duration-300 group flex flex-col">
-      {/* Top gradient stripe */}
-      <div className="h-1.5 bg-gradient-to-r from-primary via-violet-500 to-indigo-500" />
+      {/* Top cover or gradient stripe */}
+      {mentor.coverImage ? (
+        <div className="h-16 w-full relative overflow-hidden bg-indigo-50/50">
+          <Image src={mentor.coverImage} alt={`${mentor.name} Cover`} fill className="object-cover" />
+        </div>
+      ) : (
+        <div className="h-1.5 bg-gradient-to-r from-primary via-violet-500 to-indigo-500" />
+      )}
 
-      <div className="p-5 flex-1 flex flex-col">
+      <div className={cn("px-5 pb-5 flex-1 flex flex-col", mentor.coverImage ? "pt-0" : "pt-5")}>
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="relative">
-            <img
+        <div className="flex items-start justify-between mb-2">
+          <div className={cn("relative shrink-0", mentor.coverImage && "-mt-6")}>
+            <Image
               src={mentor.image ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(mentor.name)}&background=6366f1&color=fff&size=80`}
               alt={mentor.name}
-              className="w-16 h-16 rounded-xl object-cover border-2 border-background shadow-md"
+              width={64}
+              height={64}
+              priority
+              className="w-16 h-16 rounded-xl object-cover border-2 border-background shadow-sm bg-background relative z-10"
+              unoptimized={mentor.image?.includes("ui-avatars") ?? true}
             />
             {mentor.verified && (
-              <div className="absolute -bottom-1.5 -right-1.5 bg-background rounded-full p-0.5 shadow">
+              <div className="absolute -bottom-1.5 -right-1.5 bg-background rounded-full p-0.5 shadow z-20">
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
               </div>
             )}
-          </div>
-          <div className="text-right">
-            <div className="text-xl font-bold text-foreground">₹{mentor.price.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">/ session</div>
-            <div className="flex items-center gap-1 justify-end mt-1">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              <span className="text-sm font-semibold">{mentor.rating}</span>
-              <span className="text-xs text-muted-foreground">({mentor.reviewsCount})</span>
-            </div>
           </div>
         </div>
 
@@ -207,20 +244,20 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
         <h3 className="font-bold text-base leading-tight group-hover:text-primary transition-colors mb-0.5">
           {mentor.name}
         </h3>
-        <p className="text-sm text-muted-foreground mb-1">
+        <p className="text-sm text-muted-foreground mb-0.5">
           {mentor.role}
         </p>
-        <p className="text-sm font-semibold mb-3">
+        <p className="text-sm font-semibold mb-2">
           @ {mentor.company}
         </p>
 
         {/* Meta info */}
-        <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground mb-3">
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground mb-2">
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" /> {mentor.experienceYears} yrs
           </div>
           <div className="flex items-center gap-1">
-            <MapPin className="w-3 h-3" /> {mentor.location}
+            <MapPin className="w-3 h-3" /> {mentor.location || "Remote"}
           </div>
           <div className="flex items-center gap-1">
             <Users className="w-3 h-3" /> {mentor.totalSessions} sessions
@@ -228,7 +265,7 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
         </div>
 
         {/* Badges */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className="flex flex-wrap gap-1.5 mb-2">
           <Badge className={cn("border-0 text-xs px-2 py-0", tierColor)}>
             {mentor.companyTier}
           </Badge>
@@ -247,12 +284,12 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
         {/* Skills */}
         <div className="flex flex-wrap gap-1.5 mb-4 flex-1">
           {skills.slice(0, 4).map((s) => (
-            <Badge key={s} variant="secondary" className="text-xs bg-muted/60 font-normal px-2 py-0">
+            <Badge key={s} variant="secondary" className="text-xs font-medium px-2 py-0.5">
               {s}
             </Badge>
           ))}
           {skills.length > 4 && (
-            <Badge variant="secondary" className="text-xs bg-muted/60 font-normal px-2 py-0">
+            <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
               +{skills.length - 4}
             </Badge>
           )}
@@ -264,13 +301,34 @@ export function MentorResultCard({ mentor, view = "grid" }: MentorResultCardProp
             <Calendar className="w-3 h-3" />
             {formatNextAvailable(mentor.nextAvailable)}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Link href={`/mentors/${mentor.id}`} className="flex-1">
               <Button variant="outline" size="sm" className="w-full rounded-lg text-xs">View Profile</Button>
             </Link>
             <Link href={`/mentors/${mentor.id}`} className="flex-1">
-              <Button size="sm" className="w-full rounded-lg text-xs">Book Now</Button>
+              <Button size="sm" className="w-full rounded-lg text-xs bg-blue-600 hover:bg-blue-700 text-white">Book Now</Button>
             </Link>
+            {onToggleSave && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleSave(mentor.id);
+                }}
+                disabled={isSaving}
+                aria-label={isSaved ? "Remove from saved mentors" : "Save mentor"}
+                title={isSaved ? "Saved" : "Save mentor"}
+                className={cn(
+                  "h-8 w-8 rounded-lg border flex items-center justify-center transition-all shrink-0 cursor-pointer",
+                  isSaved
+                    ? "bg-orange-50 border-orange-200 text-[#FF6B00] dark:bg-orange-950/30 dark:border-orange-900 dark:text-[#FF6B00]"
+                    : "bg-background border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
+                )}
+              >
+                <Bookmark className={cn("w-3.5 h-3.5 transition-transform active:scale-90", isSaved && "fill-[#FF6B00] text-[#FF6B00]")} />
+              </button>
+            )}
           </div>
         </div>
       </div>

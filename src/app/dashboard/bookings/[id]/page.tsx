@@ -9,9 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { format } from "date-fns";
+import { getSessionWindow } from "@/lib/session-utils";
 import { cn } from "@/lib/utils";
 import { CareerRoadmap } from "@/components/dashboard/CareerRoadmap";
 import { ReviewSessionDialog } from "@/components/dashboard/ReviewSessionDialog";
+import { SupportActionsClient } from "@/components/booking/SupportActionsClient";
 
 function BookingTimeline({ status, isCompleted }: { status: string, isCompleted: boolean }) {
   const steps = [
@@ -70,10 +72,13 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
   
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({
+  const booking = await prisma.booking.findFirst({
     where: {
       id: id,
-      userId: session.user.id
+      OR: [
+        { userId: session.user.id },
+        { mentor: { userId: session.user.id } }
+      ]
     },
     include: {
       mentor: {
@@ -85,7 +90,8 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
       sessionNotes: true,
       sessionSummary: true,
       tasks: true,
-      rescheduleReq: true
+      rescheduleReq: true,
+      cancellationReq: true,
     }
   });
 
@@ -123,6 +129,51 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
       </div>
 
       <BookingTimeline status={booking.status} isCompleted={isCompleted} />
+
+      {booking.cancellationReq && (
+        <Card className={cn("mb-8 shadow-sm border",
+          booking.cancellationReq.status === "PENDING" ? "border-amber-200 bg-amber-50/50" :
+          booking.cancellationReq.status === "APPROVED" ? "border-red-200 bg-red-50/50" :
+          "border-slate-200 bg-slate-50/50"
+        )}>
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertCircle className={cn("h-5 w-5 mt-0.5",
+              booking.cancellationReq.status === "PENDING" ? "text-amber-600" :
+              booking.cancellationReq.status === "APPROVED" ? "text-red-600" :
+              "text-slate-600"
+            )} />
+            <div>
+              <h3 className={cn("font-semibold",
+                booking.cancellationReq.status === "PENDING" ? "text-amber-900" :
+                booking.cancellationReq.status === "APPROVED" ? "text-red-900" :
+                "text-slate-900"
+              )}>
+                Cancellation Request {booking.cancellationReq.status === "PENDING" ? "Pending Mentor Approval" : booking.cancellationReq.status === "APPROVED" ? "Approved" : "Declined"}
+              </h3>
+              <p className={cn("text-sm mt-1",
+                booking.cancellationReq.status === "PENDING" ? "text-amber-700/90" :
+                booking.cancellationReq.status === "APPROVED" ? "text-red-700/90" :
+                "text-slate-700/90"
+              )}>
+                {booking.cancellationReq.status === "PENDING"
+                  ? "You submitted a cancellation request for this booking. Waiting for your mentor's review."
+                  : booking.cancellationReq.status === "APPROVED"
+                  ? "This cancellation was approved by the mentor. The booking is cancelled."
+                  : "The cancellation request was declined by the mentor. The session remains scheduled."}
+              </p>
+              {booking.cancellationReq.reason && (
+                <p className={cn("text-sm mt-2 italic",
+                  booking.cancellationReq.status === "PENDING" ? "text-amber-700/70" :
+                  booking.cancellationReq.status === "APPROVED" ? "text-red-700/70" :
+                  "text-slate-700/70"
+                )}>
+                  Reason: &ldquo;{booking.cancellationReq.reason}&rdquo;
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {booking.rescheduleReq && (
         <Card className={cn("mb-8 shadow-sm border", 
@@ -201,6 +252,9 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
                   <div>
                     <h3 className="font-bold text-xl">{booking.mentor?.name}</h3>
                     <p className="text-muted-foreground">{booking.mentor?.role} {booking.mentor?.company ? `at ${booking.mentor.company}` : ''}</p>
+                    <div className="inline-flex items-center mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                      {booking.sessionTitle || "1:1 Mentorship Session"}
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 pt-3 border-t">
@@ -228,6 +282,11 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
                   <AlertCircle className="h-5 w-5" />
                   <p className="text-sm font-medium">This session was cancelled. The meeting link is no longer available.</p>
                 </div>
+              ) : booking.status === "MISSED" || booking.status === "EXPIRED" ? (
+                <div className="flex items-center gap-3 p-4 bg-destructive/10 text-destructive rounded-lg">
+                  <AlertCircle className="h-5 w-5" />
+                  <p className="text-sm font-medium">This session has expired or was missed.</p>
+                </div>
               ) : booking.meetingLink ? (
                 <div className="space-y-4">
                   <div className="p-4 border rounded-lg bg-blue-50/50 border-blue-100 flex items-center justify-between">
@@ -240,9 +299,28 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
                         <p className="text-xs text-blue-700/80">Link is active during the scheduled time.</p>
                       </div>
                     </div>
-                    <a href={booking.meetingLink} target="_blank" rel="noopener noreferrer" className={buttonVariants()}>
-                      Join Meeting
-                    </a>
+                    {(() => {
+                      const windowStatus = getSessionWindow({ startTime: booking.startTime, endTime: booking.endTime, status: booking.status });
+                      if (windowStatus === 'in_window') {
+                        return (
+                          <a href={`/api/meetings/${booking.id}/join`} target="_blank" rel="noopener noreferrer" className={buttonVariants()}>
+                            Join Meeting
+                          </a>
+                        );
+                      } else if (windowStatus === 'before_window') {
+                        return (
+                          <div className={buttonVariants({ variant: "secondary" })}>
+                            Available Soon
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className={buttonVariants({ variant: "secondary" })}>
+                            Ended
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     <strong className="text-foreground">Session Notes:</strong> Please join 5 minutes early. Ensure your microphone and camera are working.
@@ -266,7 +344,7 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground text-sm">Amount Paid</span>
-                <span className="font-bold">₹{((booking.payment?.amount || 0) / 100).toLocaleString('en-IN')}</span>
+                <span className="font-bold">₹{((booking.payment?.amount || 0)).toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground text-sm">Status</span>
@@ -303,12 +381,16 @@ export default async function BookingDetailsPage({ params }: { params: Promise<{
                   </div>
                 </div>
               )}
-              <a href={`mailto:${booking.mentor.user?.email || ''}?subject=Support needed for Booking BK-${booking.id.slice(-8).toUpperCase()}`} className={cn(buttonVariants({ variant: "outline" }), "w-full justify-start")}>
-                <MessageSquare className="h-4 w-4 mr-2" /> Contact Mentor
-              </a>
-              <Button variant="ghost" className="w-full justify-start text-muted-foreground">
-                <AlertCircle className="h-4 w-4 mr-2" /> Report an issue
-              </Button>
+              <SupportActionsClient 
+                bookingId={booking.id}
+                mentorName={booking.mentor.name}
+                mentorRole={booking.mentor.role}
+                mentorCompany={booking.mentor.company}
+                mentorImage={booking.mentor.user?.image || null}
+                mentorEmail={booking.mentor.user?.email || ""}
+                sessionDate={booking.date}
+                sessionTime={`${new Date(booking.startTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })} - ${new Date(booking.endTime).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true })}`}
+              />
             </CardContent>
           </Card>
         </div>

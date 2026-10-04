@@ -19,13 +19,18 @@ export default async function JobSeekerDashboard() {
   const initialData = await getJobSeekerDashboardRealtime(user.id);
   
   // Reviews
-  const completedBookings = initialData.completedSessions > 0 
+  const completedBookings = (initialData?.completedSessions && initialData.completedSessions > 0)
     ? initialData.allBookings.filter((b: any) => b.status === "COMPLETED" || new Date(b.endTime) < new Date())
     : [];
     
-  const userReviews = await prisma.review.findMany({
-    where: { userId: user.id },
-  });
+  let userReviews: any[] = [];
+  try {
+    userReviews = await prisma.review.findMany({
+      where: { userId: user.id },
+    });
+  } catch (error) {
+    console.warn("Database query failed for reviews. Falling back to empty array.");
+  }
   
   const reviewedBookingIds = new Set(userReviews.map((r) => r.bookingId));
   const needsReviewBookings = completedBookings.filter((b: any) => !reviewedBookingIds.has(b.id));

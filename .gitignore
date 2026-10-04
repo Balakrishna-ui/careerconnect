@@ -36,6 +36,20 @@ yarn-error.log*
 # vercel
 .vercel
 
+# scratch and test scripts
+scratch_*
+test-*
+test.*
+clear-db.js
+create-users.js
+output.txt
+profile_history.txt
+schema_history.txt
+update-styles.js
+verify_phase1.*
+vercel_deployments.txt
+.agents/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

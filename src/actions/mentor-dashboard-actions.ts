@@ -5,16 +5,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 async function getMentorId() {
-  // const session = await getServerSession(authOptions);
-  // if (!session || session.user?.role !== "MENTOR") {
-  //   throw new Error("Unauthorized: Mentor access required");
-  // }
+  const session = await getServerSession(authOptions);
+  if (!session || (session.user?.role !== "MENTOR" && session.user?.role !== "ADMIN")) {
+    throw new Error("Unauthorized: Mentor access required");
+  }
   
-  // const mentor = await prisma.mentor.findUnique({ where: { userId: session.user.id }});
-  // if (!mentor) throw new Error("Mentor profile not found");
-  // return mentor.id;
-  
-  return "dummy-mentor-id"; // For testing
+  const mentor = await prisma.mentor.findUnique({ where: { userId: session.user.id }});
+  if (!mentor) throw new Error("Mentor profile not found");
+  return mentor.id;
 }
 
 export async function updateMentorProfile(data: any) {
@@ -47,6 +45,15 @@ export async function updateMentorAvailability(isAvailable: boolean) {
 
 export async function toggleVacationMode(mentorUserId: string, isVacation: boolean) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (session.user.role !== "ADMIN" && session.user.id !== mentorUserId) {
+      return { success: false, error: "Unauthorized: Cannot change vacation mode for another user" };
+    }
+
     await prisma.mentor.update({
       where: { userId: mentorUserId },
       data: { vacationMode: isVacation }
@@ -64,9 +71,11 @@ export async function getMentorDashboardData() {
   const [profile, bookings, reviews] = await Promise.all([
     prisma.mentor.findUnique({ where: { id: mentorId }, include: { socialProfiles: true, skills: true, sessionTypes: true } }),
     prisma.booking.findMany({ where: { mentorId }, include: { user: true, payment: true }, orderBy: { date: 'desc' } }),
-    // Replace with proper Review model once added or use another logic
-    // prisma.review.findMany({ where: { mentorId } })
-    []
+    prisma.review.findMany({
+      where: { mentorId },
+      include: { user: { select: { name: true, image: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
 
   return {

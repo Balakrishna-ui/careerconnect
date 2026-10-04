@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useOptimistic, startTransition } from "react";
 import { BookingRequestCard } from "./BookingRequestCard";
 import { acceptBooking, rejectBooking } from "@/actions/mentor-booking-actions";
 import {
@@ -16,11 +16,16 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, Link as LinkIcon, Check, X } from "lucide-react";
 
-export function BookingRequestList({ bookings }: { bookings: any[] }) {
+export function BookingRequestList({ bookings, onActionComplete }: { bookings: any[], onActionComplete?: () => void }) {
   const [activeAction, setActiveAction] = useState<{ id: string, type: "ACCEPT" | "REJECT", name: string } | null>(null);
   const [meetingLink, setMeetingLink] = useState("");
   const [meetingInstructions, setMeetingInstructions] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [optimisticBookings, removeOptimisticBooking] = useOptimistic<any[], string>(
+    bookings,
+    (state, idToReject) => state.filter((b) => b.id !== idToReject)
+  );
 
   const handleAction = async () => {
     if (!activeAction) return;
@@ -28,14 +33,24 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
     setIsLoading(true);
     let res;
     
-    if (activeAction.type === "ACCEPT") {
-      if (!meetingLink) {
-        setIsLoading(false);
-        return;
-      }
-      res = await acceptBooking(activeAction.id, meetingLink, meetingInstructions);
+    const actionId = activeAction.id;
+    const actionType = activeAction.type;
+    const link = meetingLink;
+    const instructions = meetingInstructions;
+    
+    if (actionType === "ACCEPT" && !link) {
+      setIsLoading(false);
+      return;
+    }
+
+    startTransition(() => {
+      removeOptimisticBooking(actionId);
+    });
+    
+    if (actionType === "ACCEPT") {
+      res = await acceptBooking(actionId, link, instructions);
     } else {
-      res = await rejectBooking(activeAction.id);
+      res = await rejectBooking(actionId);
     }
     
     setIsLoading(false);
@@ -44,25 +59,28 @@ export function BookingRequestList({ bookings }: { bookings: any[] }) {
       setActiveAction(null);
       setMeetingLink("");
       setMeetingInstructions("");
+      if (onActionComplete) {
+        onActionComplete();
+      }
     } else {
-      alert(res.error || `Failed to ${activeAction.type.toLowerCase()} booking`);
+      alert(res.error || `Failed to ${actionType.toLowerCase()} booking`);
     }
   };
 
-  if (bookings.length === 0) {
+  if (optimisticBookings.length === 0) {
     return <div className="text-sm text-muted-foreground p-4 bg-muted/20 rounded-xl border border-dashed border-border text-center">No pending requests at the moment.</div>;
   }
 
   return (
     <div className="space-y-4">
-      {bookings.map((booking) => (
+      {optimisticBookings.map((booking) => (
         <BookingRequestCard
           key={booking.id}
           id={booking.id}
           patientName={booking.user.name}
           patientImage={booking.user.image}
-          serviceTitle="1:1 Mentorship Session"
-          dateStr={booking.date.toLocaleDateString()}
+          serviceTitle={booking.sessionTitle || "1:1 Mentorship Session"}
+          dateStr={booking.date.toLocaleDateString('en-US')}
           timeStr={booking.startTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute:'2-digit', hour12: true })}
           duration={Math.round((booking.endTime.getTime() - booking.startTime.getTime()) / 60000)}
           price={booking.price}

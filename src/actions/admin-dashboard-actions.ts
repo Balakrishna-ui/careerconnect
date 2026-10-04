@@ -9,9 +9,10 @@ import { authOptions } from "@/lib/auth";
  */
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
+  if (!session?.user || session.user.role !== "ADMIN") {
+    throw new Error("Unauthorized: Admin access required");
   }
+  return session.user.id;
 }
 
 /**
@@ -52,15 +53,20 @@ export async function getAdminKPIs() {
   });
 
   // Revenue (We only count successful payments)
-  const allSuccessfulPayments = await prisma.payment.findMany({
+  const totalRevenueAgg = await prisma.payment.aggregate({
     where: { status: "SUCCESS" },
-    select: { amount: true, createdAt: true }
+    _sum: { amount: true }
   });
-
-  const totalRevenue = allSuccessfulPayments.reduce((acc, p) => acc + p.amount, 0);
+  const totalRevenue = totalRevenueAgg._sum.amount || 0;
   
-  const monthlyPayments = allSuccessfulPayments.filter(p => p.createdAt >= startOfMonth);
-  const monthlyRevenue = monthlyPayments.reduce((acc, p) => acc + p.amount, 0);
+  const monthlyRevenueAgg = await prisma.payment.aggregate({
+    where: { 
+      status: "SUCCESS",
+      createdAt: { gte: startOfMonth }
+    },
+    _sum: { amount: true }
+  });
+  const monthlyRevenue = monthlyRevenueAgg._sum.amount || 0;
 
   return {
     totalUsers,
@@ -83,8 +89,14 @@ export async function getAdminKPIs() {
 export async function getAdminRevenueTrend() {
   await requireAdmin();
   
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
   const payments = await prisma.payment.findMany({
-    where: { status: "SUCCESS" },
+    where: { 
+      status: "SUCCESS",
+      createdAt: { gte: oneYearAgo }
+    },
     select: { amount: true, createdAt: true },
     orderBy: { createdAt: 'asc' }
   });
@@ -120,7 +132,13 @@ export async function getAdminRevenueTrend() {
 export async function getUserGrowthTrend() {
   await requireAdmin();
   
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
   const users = await prisma.user.findMany({
+    where: {
+      createdAt: { gte: oneYearAgo }
+    },
     select: { createdAt: true, role: true },
     orderBy: { createdAt: 'asc' }
   });
@@ -128,8 +146,13 @@ export async function getUserGrowthTrend() {
   const monthlyData: Record<string, { mentors: number, jobSeekers: number }> = {};
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  let cumMentors = 0;
-  let cumJobSeekers = 0;
+  const [baseMentors, baseTotalUsers] = await Promise.all([
+    prisma.user.count({ where: { role: "MENTOR", createdAt: { lt: oneYearAgo } } }),
+    prisma.user.count({ where: { createdAt: { lt: oneYearAgo } } })
+  ]);
+
+  let cumMentors = baseMentors;
+  let cumJobSeekers = baseTotalUsers - baseMentors;
 
   users.forEach(u => {
     const monthName = months[u.createdAt.getMonth()];

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { useMentorRegistration } from "@/hooks/useMentorRegistration";
 
 export function MentorSignupForm() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export function MentorSignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const { updateData } = useMentorRegistration();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !email || !password) return;
@@ -26,42 +29,19 @@ export function MentorSignupForm() {
     setError("");
 
     try {
-      // 1. Create User and Mentor Profile
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          firstName, 
-          lastName, 
-          email, 
-          password,
-          role: "MENTOR"
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Something went wrong during registration");
-      }
-
-      // 2. Automatically sign in the newly created mentor
-      const signInResult = await signIn("credentials", {
-        redirect: false,
+      // Temporarily store basic details for the multi-step registration flow
+      updateData({
+        firstName,
+        lastName,
         email,
         password,
       });
 
-      if (signInResult?.error) {
-        throw new Error("Failed to automatically sign in after registration");
-      }
-
-      // 3. Redirect to Onboarding / Dashboard
-      router.push("/mentor/apply");
-      router.refresh();
+      // Redirect to Step 2 (Education)
+      router.push("/mentor-register/education");
       
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "An error occurred");
       setIsLoading(false);
     }
   };

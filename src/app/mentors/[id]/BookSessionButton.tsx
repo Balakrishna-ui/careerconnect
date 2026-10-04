@@ -10,10 +10,16 @@ export default function BookSessionButton({
   mentorId,
   serviceId,
   isAuthenticated,
+  className,
+  variant,
+  children,
 }: {
   mentorId: string;
   serviceId?: string;
   isAuthenticated: boolean;
+  className?: string;
+  variant?: "default" | "outline" | "secondary";
+  children?: React.ReactNode;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -34,11 +40,12 @@ export default function BookSessionButton({
         href={bookUrl}
         onClick={handleClick}
         className={cn(
-          buttonVariants({ size: "lg" }),
-          "w-full h-12 text-sm font-semibold shadow-md"
+          buttonVariants({ size: "lg", variant: variant || "default" }),
+          "w-full h-11 text-sm font-semibold shadow-xs transition-all",
+          className
         )}
       >
-        Book Session
+        {children || "Book Session"}
       </Link>
 
       <LoginRequiredModal

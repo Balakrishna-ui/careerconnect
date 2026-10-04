@@ -6,6 +6,8 @@ import {
   FileText, ChevronRight, Clock, AlertCircle, Shield, Mail, Phone,
   Link2, ExternalLink, Loader2
 } from "lucide-react";
+import { getPusherClient } from "@/lib/pusher-client";
+import { toast } from "sonner";
 
 interface MentorApplication {
   id: string;
@@ -36,17 +38,17 @@ interface AuditLog {
 }
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  PENDING: { bg: "bg-amber-50", text: "text-amber-700", label: "Pending Review" },
-  VERIFIED: { bg: "bg-green-50", text: "text-green-700", label: "Verified" },
-  REJECTED: { bg: "bg-red-50", text: "text-red-600", label: "Rejected" },
-  MORE_INFO_REQUIRED: { bg: "bg-blue-50", text: "text-blue-700", label: "More Info Needed" },
-  DRAFT: { bg: "bg-gray-50", text: "text-gray-500", label: "Draft" },
+  PENDING: { bg: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-700 dark:text-amber-500", label: "Pending Review" },
+  VERIFIED: { bg: "bg-green-50 dark:bg-green-500/10", text: "text-green-700 dark:text-green-500", label: "Verified" },
+  REJECTED: { bg: "bg-red-50 dark:bg-red-500/10", text: "text-red-600 dark:text-red-500", label: "Rejected" },
+  MORE_INFO_REQUIRED: { bg: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-700 dark:text-blue-500", label: "More Info Needed" },
+  DRAFT: { bg: "bg-background dark:bg-gray-800", text: "text-muted-foreground dark:text-muted-foreground", label: "Draft" },
 };
 
 const DOC_STATUS_BADGE: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  PENDING: { color: "text-amber-600 bg-amber-50", icon: Clock, label: "Pending Review" },
-  VERIFIED: { color: "text-green-600 bg-green-50", icon: CheckCircle2, label: "Verified" },
-  REJECTED: { color: "text-red-600 bg-red-50", icon: XCircle, label: "Rejected" },
+  PENDING: { color: "text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-500/10", icon: Clock, label: "Pending Review" },
+  VERIFIED: { color: "text-green-600 dark:text-green-500 bg-green-50 dark:bg-green-500/10", icon: CheckCircle2, label: "Verified" },
+  REJECTED: { color: "text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-500/10", icon: XCircle, label: "Rejected" },
 };
 
 export default function VerificationDashboard() {
@@ -70,6 +72,26 @@ export default function VerificationDashboard() {
 
   useEffect(() => {
     fetchApplications();
+  }, [statusFilter]);
+
+  // Pusher real-time updates
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe("admin-channel");
+
+    channel.bind("mentor-registered", (data: any) => {
+      toast.info(`New mentor registration: ${data.name}`);
+      fetchApplications();
+    });
+
+    channel.bind("mentor-status-changed", () => {
+      fetchApplications();
+    });
+
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe("admin-channel");
+    };
   }, [statusFilter]);
 
   async function fetchApplications() {
@@ -166,15 +188,15 @@ export default function VerificationDashboard() {
   const rejectionReview = isRejected ? selected?.adminReviews?.find(r => r.statusGiven === "REJECTED") : null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <Shield className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Mentor Verification</h1>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">Mentor Verification</h1>
           </div>
           <div className="flex items-center gap-3">
             {["PENDING", "MORE_INFO_REQUIRED", "VERIFIED", "REJECTED"].map(s => {
@@ -186,7 +208,7 @@ export default function VerificationDashboard() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                     statusFilter === s 
                       ? `${badge.bg} ${badge.text} border-current` 
-                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                      : "bg-card text-muted-foreground border-border hover:bg-background"
                   }`}
                 >
                   {badge.label}
@@ -200,20 +222,20 @@ export default function VerificationDashboard() {
       <main className="p-8">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
           {/* Left Panel — Queue */}
-          <div className="xl:col-span-3 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 130px)' }}>
-            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-              <h3 className="font-semibold text-gray-900 text-sm">{STATUS_BADGE[statusFilter]?.label} Queue</h3>
+          <div className="xl:col-span-3 bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 130px)' }}>
+            <div className="p-4 border-b border-border bg-background/50 flex justify-between items-center">
+              <h3 className="font-semibold text-foreground text-sm">{STATUS_BADGE[statusFilter]?.label} Queue</h3>
               <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{mentors.length}</span>
             </div>
             <div className="flex-1 overflow-y-auto">
               {loading ? (
-                <div className="flex items-center justify-center h-full text-gray-400">
+                <div className="flex items-center justify-center h-full text-muted-foreground">
                   <Loader2 className="w-6 h-6 animate-spin" />
                 </div>
               ) : mentors.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6 text-center">
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6 text-center">
                   <CheckCircle2 className="w-10 h-10 mb-3 text-gray-300" />
-                  <p className="font-semibold text-gray-500">All clear!</p>
+                  <p className="font-semibold text-muted-foreground">All clear!</p>
                   <p className="text-sm">No applications in this queue.</p>
                 </div>
               ) : (
@@ -225,7 +247,7 @@ export default function VerificationDashboard() {
                         key={m.id}
                         onClick={() => setSelectedId(m.id)}
                         className={`w-full text-left p-4 rounded-xl transition-colors border ${
-                          selectedId === m.id ? "border-blue-200 bg-blue-50/50" : "border-transparent hover:bg-gray-50"
+                          selectedId === m.id ? "border-blue-200 bg-blue-50/50" : "border-transparent hover:bg-background"
                         }`}
                       >
                         <div className="flex items-start gap-3">
@@ -235,8 +257,8 @@ export default function VerificationDashboard() {
                             className="w-10 h-10 rounded-full object-cover shrink-0"
                           />
                           <div className="min-w-0">
-                            <p className="font-bold text-gray-900 text-sm truncate">{m.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{m.role} @ {m.company}</p>
+                            <p className="font-bold text-foreground text-sm truncate">{m.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{m.role} @ {m.company}</p>
                             <div className="flex items-center gap-2 mt-1.5">
                               <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.bg} ${badge.text}`}>
                                 {badge.label}
@@ -254,7 +276,7 @@ export default function VerificationDashboard() {
 
           {/* Middle Panel — Profile & Documents */}
           {selected && (
-            <div className="xl:col-span-5 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-y-auto p-6" style={{ height: 'calc(100vh - 130px)' }}>
+            <div className="xl:col-span-5 bg-card rounded-2xl border border-border shadow-sm overflow-y-auto p-6" style={{ height: 'calc(100vh - 130px)' }}>
               
               {/* REJECTED BANNER */}
               {isRejected && (
@@ -282,9 +304,9 @@ export default function VerificationDashboard() {
                   className="w-16 h-16 rounded-full object-cover shrink-0"
                 />
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">{selected.name}</h3>
-                  <p className="text-gray-600">{selected.role} at <span className="font-semibold text-gray-800">{selected.company}</span></p>
-                  <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-500">
+                  <h3 className="text-xl font-bold text-foreground">{selected.name}</h3>
+                  <p className="text-muted-foreground">{selected.role} at <span className="font-semibold text-foreground">{selected.company}</span></p>
+                  <div className="flex flex-wrap gap-3 mt-2 text-sm text-muted-foreground">
                     {selected.experienceYears && <span className="flex items-center gap-1"><Briefcase className="w-3.5 h-3.5" /> {selected.experienceYears} yrs exp.</span>}
                     {selected.industry && <span>• {selected.industry}</span>}
                   </div>
@@ -293,7 +315,7 @@ export default function VerificationDashboard() {
                       <Mail className="w-3 h-3" /> {selected.user.email}
                     </a>
                     {selected.user.mobile && (
-                      <span className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                      <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">
                         <Phone className="w-3 h-3" /> {selected.user.mobile}
                       </span>
                     )}
@@ -309,18 +331,18 @@ export default function VerificationDashboard() {
               {/* Bio */}
               {selected.bio && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-2">Professional Bio</h4>
-                  <p className="text-sm text-gray-600 leading-relaxed">{selected.bio}</p>
+                  <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-2">Professional Bio</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{selected.bio}</p>
                 </div>
               )}
 
               {/* Skills */}
               {selected.skills.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Skills & Expertise</h4>
+                  <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3">Skills & Expertise</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {selected.skills.map(s => (
-                      <span key={s.id} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{s.name}</span>
+                      <span key={s.id} className="px-2 py-1 bg-muted text-foreground rounded-full text-xs font-medium">{s.name}</span>
                     ))}
                   </div>
                 </div>
@@ -329,14 +351,14 @@ export default function VerificationDashboard() {
               {/* Session Types */}
               {selected.sessionTypes.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Session Types</h4>
+                  <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3">Session Types</h4>
                   <div className="space-y-2">
                     {selected.sessionTypes.map(s => (
-                      <div key={s.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm">
-                        <span className="font-medium text-gray-700">{s.title}</span>
-                        <div className="flex items-center gap-3 text-gray-500">
+                      <div key={s.id} className="flex items-center justify-between p-3 bg-background rounded-lg text-sm">
+                        <span className="font-medium text-foreground">{s.title}</span>
+                        <div className="flex items-center gap-3 text-muted-foreground">
                           <span>{s.duration} mins</span>
-                          <span className="font-bold text-gray-900">₹{s.price}</span>
+                          <span className="font-bold text-foreground">₹{s.price}</span>
                         </div>
                       </div>
                     ))}
@@ -372,7 +394,7 @@ export default function VerificationDashboard() {
               )}
               
               <div>
-                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 border-t border-gray-100 pt-6">Document Checklist</h4>
+                <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3 border-t border-border pt-6">Document Checklist</h4>
                 {selected.documents.length > 0 ? (
                   <div className="space-y-2">
                     {selected.documents.map(doc => {
@@ -384,11 +406,11 @@ export default function VerificationDashboard() {
                         <div 
                           key={doc.id} 
                           onClick={() => !isRejected && setViewingDoc(doc.fileUrl)}
-                          className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50 transition-colors ${isRejected ? "opacity-90" : "hover:bg-white cursor-pointer group"}`}
+                          className={`flex items-center justify-between p-3 rounded-lg border border-border bg-background transition-colors ${isRejected ? "opacity-90" : "hover:bg-card cursor-pointer group"}`}
                         >
                           <div className="flex items-center gap-3">
-                            <FileText className={`w-4 h-4 text-gray-400 ${!isRejected && "group-hover:text-blue-500 transition-colors"}`} />
-                            <span className={`font-medium text-sm text-gray-700 ${!isRejected && "group-hover:text-blue-700 transition-colors"}`}>{doc.type.replace("_", " ")}</span>
+                            <FileText className={`w-4 h-4 text-muted-foreground ${!isRejected && "group-hover:text-blue-500 transition-colors"}`} />
+                            <span className={`font-medium text-sm text-foreground ${!isRejected && "group-hover:text-blue-700 transition-colors"}`}>{doc.type.replace("_", " ")}</span>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${badge.color}`}>
@@ -410,20 +432,20 @@ export default function VerificationDashboard() {
 
               {/* Audit Trail */}
               {selected.adminReviews.length > 0 && (
-                <div className="mt-6 border-t border-gray-100 pt-6">
-                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Audit Trail</h4>
+                <div className="mt-6 border-t border-border pt-6">
+                  <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-3">Audit Trail</h4>
                   <div className="space-y-3">
                     {selected.adminReviews.map(r => (
                       <div key={r.id} className="flex items-start gap-3 text-sm">
-                        <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 shrink-0 mt-0.5">
+                        <div className="w-6 h-6 bg-muted rounded-full flex items-center justify-center text-muted-foreground shrink-0 mt-0.5">
                           <User className="w-3 h-3" />
                         </div>
                         <div>
-                          <p className="text-gray-700">
+                          <p className="text-foreground">
                             <span className="font-semibold">{r.admin.name}</span> set status to <span className="font-semibold">{r.statusGiven}</span>
                           </p>
-                          {r.reason && <p className="text-gray-500 mt-0.5">Reason: {r.reason}</p>}
-                          <p className="text-xs text-gray-400 mt-1">{new Date(r.createdAt).toLocaleString()}</p>
+                          {r.reason && <p className="text-muted-foreground mt-0.5">Reason: {r.reason}</p>}
+                          <p className="text-xs text-muted-foreground mt-1">{new Date(r.createdAt).toLocaleString()}</p>
                         </div>
                       </div>
                     ))}
@@ -435,8 +457,8 @@ export default function VerificationDashboard() {
 
           {/* Right Panel — Actions */}
           {selected && (
-            <div className="xl:col-span-4 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col" style={{ height: 'calc(100vh - 130px)' }}>
-              <h3 className="text-lg font-bold text-gray-900 mb-6">{isRejected ? "Application Status" : "Review Actions"}</h3>
+            <div className="xl:col-span-4 bg-card rounded-2xl border border-border shadow-sm p-6 flex flex-col" style={{ height: 'calc(100vh - 130px)' }}>
+              <h3 className="text-lg font-bold text-foreground mb-6">{isRejected ? "Application Status" : "Review Actions"}</h3>
 
               {isRejected ? (
                 <div className="flex-1 space-y-6 animate-in fade-in duration-300">
@@ -459,39 +481,39 @@ export default function VerificationDashboard() {
 
                   {/* Profile completion */}
                   <div>
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Profile Status</p>
-                    <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100 rounded-lg">
-                      <span className="text-sm font-medium text-gray-600">Application Closed</span>
+                    <p className="text-sm font-semibold text-foreground mb-2">Profile Status</p>
+                    <div className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
+                      <span className="text-sm font-medium text-muted-foreground">Application Closed</span>
                       <div className="w-16 h-1.5 bg-red-500 rounded-full" />
                     </div>
                   </div>
 
                   {/* Timeline */}
                   <div>
-                    <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 border-b border-gray-100 pt-2 pb-2">Timeline</h4>
+                    <h4 className="text-sm font-bold text-foreground uppercase tracking-wider mb-4 border-b border-border pt-2 pb-2">Timeline</h4>
                     <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2.5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gray-200">
                       
                       <div className="relative flex items-center justify-between group is-active">
-                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 shadow shrink-0 z-10">
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-muted-foreground shadow shrink-0 z-10">
                           <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                         </div>
-                        <div className="w-[calc(100%-2.5rem)] text-sm text-gray-500 font-medium ml-4">
+                        <div className="w-[calc(100%-2.5rem)] text-sm text-muted-foreground font-medium ml-4">
                           Submitted
                         </div>
                       </div>
                       <div className="relative flex items-center justify-between group is-active">
-                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 shadow shrink-0 z-10">
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-muted-foreground shadow shrink-0 z-10">
                           <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                         </div>
-                        <div className="w-[calc(100%-2.5rem)] text-sm text-gray-500 font-medium ml-4">
+                        <div className="w-[calc(100%-2.5rem)] text-sm text-muted-foreground font-medium ml-4">
                           Documents Uploaded
                         </div>
                       </div>
                       <div className="relative flex items-center justify-between group is-active">
-                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 shadow shrink-0 z-10">
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-muted-foreground shadow shrink-0 z-10">
                           <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                         </div>
-                        <div className="w-[calc(100%-2.5rem)] text-sm text-gray-500 font-medium ml-4">
+                        <div className="w-[calc(100%-2.5rem)] text-sm text-muted-foreground font-medium ml-4">
                           Under Review
                         </div>
                       </div>
@@ -517,9 +539,9 @@ export default function VerificationDashboard() {
                 <div className="flex-1 space-y-6 animate-in fade-in duration-300">
                   {/* Profile completion */}
                   <div>
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Profile Completion</p>
+                    <p className="text-sm font-semibold text-foreground mb-2">Profile Completion</p>
                     <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                         <div className="h-full bg-blue-600 rounded-full" style={{ width: `${selected.completionScore}%` }} />
                       </div>
                       <span className="text-sm font-bold text-blue-600">{selected.completionScore}%</span>
@@ -528,12 +550,12 @@ export default function VerificationDashboard() {
 
                   {/* Notes */}
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">Admin Notes</label>
+                    <label className="text-sm font-semibold text-foreground">Admin Notes</label>
                     <textarea
                       value={reviewNote}
                       onChange={(e) => setReviewNote(e.target.value)}
                       placeholder="Add a note about this verification..."
-                      className="w-full h-32 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none resize-none text-sm"
+                      className="w-full h-32 p-3 rounded-xl border border-border focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none resize-none text-sm"
                     />
                   </div>
 
@@ -544,7 +566,7 @@ export default function VerificationDashboard() {
                 </div>
               )}
 
-              <div className="mt-6 space-y-3 pt-6 border-t border-gray-100">
+              <div className="mt-6 space-y-3 pt-6 border-t border-border">
                 {isRejected ? (
                   <div className="space-y-3 animate-in fade-in duration-300">
                     <button
@@ -559,13 +581,13 @@ export default function VerificationDashboard() {
                         fetchActivityLogs();
                         setIsActivityLogOpen(true);
                       }}
-                      className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl transition-all"
+                      className="w-full bg-card border border-border hover:bg-background text-foreground font-bold py-3 px-4 rounded-xl transition-all"
                     >
                       View Activity Log
                     </button>
                     <button
                       onClick={() => setIsDeleteModalOpen(true)}
-                      className="w-full bg-white hover:bg-red-50 border border-transparent hover:border-red-200 text-red-500 font-semibold py-3 px-4 rounded-xl transition-all"
+                      className="w-full bg-card hover:bg-red-50 border border-transparent hover:border-red-200 text-red-500 font-semibold py-3 px-4 rounded-xl transition-all"
                     >
                       Delete Application
                     </button>
@@ -583,14 +605,14 @@ export default function VerificationDashboard() {
                     <button
                       disabled={actionLoading}
                       onClick={() => setIsMoreInfoModalOpen(true)}
-                      className="w-full bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-bold py-3 px-4 rounded-xl transition-all"
+                      className="w-full bg-card border border-border hover:bg-background disabled:opacity-50 text-foreground font-bold py-3 px-4 rounded-xl transition-all"
                     >
                       Request More Information
                     </button>
                     <button
                       disabled={actionLoading}
                       onClick={() => handleAction("REJECT")}
-                      className="w-full bg-white border border-red-200 hover:bg-red-50 hover:border-red-300 disabled:opacity-50 text-red-600 font-bold py-3 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+                      className="w-full bg-card border border-red-200 hover:bg-red-50 hover:border-red-300 disabled:opacity-50 text-red-600 font-bold py-3 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                       {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Reject Application"}
                     </button>
@@ -602,10 +624,10 @@ export default function VerificationDashboard() {
 
           {/* Empty state when no selection */}
           {!selected && !loading && (
-            <div className="xl:col-span-9 bg-white rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center" style={{ height: 'calc(100vh - 130px)' }}>
-              <div className="text-center text-gray-400">
+            <div className="xl:col-span-9 bg-card rounded-2xl border border-border shadow-sm flex items-center justify-center" style={{ height: 'calc(100vh - 130px)' }}>
+              <div className="text-center text-muted-foreground">
                 <Shield className="w-16 h-16 mx-auto mb-4 text-gray-200" />
-                <p className="font-semibold text-gray-500 text-lg">No Application Selected</p>
+                <p className="font-semibold text-muted-foreground text-lg">No Application Selected</p>
                 <p className="text-sm">Select an application from the queue to review.</p>
               </div>
             </div>
@@ -616,22 +638,22 @@ export default function VerificationDashboard() {
       {/* Document Viewer Modal */}
       {viewingDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/80 backdrop-blur-md">
+          <div className="bg-card rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-background/80 backdrop-blur-md">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                   <FileText className="w-4 h-4 text-blue-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">Document Viewer</h3>
+                <h3 className="font-semibold text-foreground">Document Viewer</h3>
               </div>
               <button 
                 onClick={() => setViewingDoc(null)}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
               >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto bg-gray-50/50 p-4">
+            <div className="flex-1 overflow-auto bg-background/50 p-4">
               {(() => {
                 const isUrl = viewingDoc.startsWith('http') || viewingDoc.startsWith('/uploads/');
                 const isDataUri = viewingDoc.startsWith('data:');
@@ -650,7 +672,7 @@ export default function VerificationDashboard() {
                   return (
                     <iframe 
                       src={src} 
-                      className="w-full h-[70vh] rounded-xl shadow-sm border border-gray-200"
+                      className="w-full h-[70vh] rounded-xl shadow-sm border border-border"
                       title="Document Viewer"
                     />
                   );
@@ -660,10 +682,10 @@ export default function VerificationDashboard() {
                   <div className="flex items-center justify-center h-[50vh]">
                     <div className="text-center space-y-4">
                       <FileText className="w-24 h-24 text-gray-300 mx-auto" />
-                      <p className="text-gray-600 font-medium bg-white px-6 py-3 rounded-xl border border-gray-200 shadow-sm max-h-32 overflow-hidden text-ellipsis break-all">
+                      <p className="text-muted-foreground font-medium bg-card px-6 py-3 rounded-xl border border-border shadow-sm max-h-32 overflow-hidden text-ellipsis break-all">
                         {viewingDoc}
                       </p>
-                      <p className="text-sm text-gray-400 max-w-sm mx-auto mt-2">
+                      <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-2">
                         (No preview available. This application was submitted before file uploads were enabled or format is unsupported.)
                       </p>
                     </div>
@@ -678,27 +700,27 @@ export default function VerificationDashboard() {
       {/* Activity Log Modal */}
       {isActivityLogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="font-bold text-gray-900">Activity Log</h3>
-              <button onClick={() => setIsActivityLogOpen(false)} className="text-gray-400 hover:text-red-500">
+          <div className="bg-card rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-background">
+              <h3 className="font-bold text-foreground">Activity Log</h3>
+              <button onClick={() => setIsActivityLogOpen(false)} className="text-muted-foreground hover:text-red-500">
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto space-y-4">
               {activityLogs.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No activity logs found.</p>
+                <p className="text-muted-foreground text-center py-4">No activity logs found.</p>
               ) : (
                 activityLogs.map(log => (
-                  <div key={log.id} className="border border-gray-100 rounded-lg p-3 text-sm">
+                  <div key={log.id} className="border border-border rounded-lg p-3 text-sm">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <span className="font-bold text-gray-800">{log.action.replace(/_/g, ' ')}</span>
-                        <p className="text-xs text-gray-500">By {log.admin?.name || "System"}</p>
+                        <span className="font-bold text-foreground">{log.action.replace(/_/g, ' ')}</span>
+                        <p className="text-xs text-muted-foreground">By {log.admin?.name || "System"}</p>
                       </div>
-                      <span className="text-xs text-gray-400">{new Date(log.createdAt).toLocaleString()}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</span>
                     </div>
-                    <pre className="bg-gray-50 p-2 rounded text-xs text-gray-600 mt-2 whitespace-pre-wrap font-sans">
+                    <pre className="bg-background p-2 rounded text-xs text-muted-foreground mt-2 whitespace-pre-wrap font-sans">
                       {log.details}
                     </pre>
                   </div>
@@ -712,41 +734,41 @@ export default function VerificationDashboard() {
       {/* Request More Info Modal */}
       {isMoreInfoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="font-bold text-gray-900">Request More Information</h3>
-              <button onClick={() => setIsMoreInfoModalOpen(false)} className="text-gray-400 hover:text-red-500">
+          <div className="bg-card rounded-2xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-background">
+              <h3 className="font-bold text-foreground">Request More Information</h3>
+              <button onClick={() => setIsMoreInfoModalOpen(false)} className="text-muted-foreground hover:text-red-500">
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">Message to applicant</label>
+                <label className="text-sm font-semibold text-foreground block mb-1">Message to applicant</label>
                 <textarea
                   value={moreInfoMessage}
                   onChange={e => setMoreInfoMessage(e.target.value)}
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                  className="w-full p-2 border border-border rounded-lg text-sm"
                   rows={3}
                   placeholder="Explain what needs to be fixed..."
                 />
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">Documents Needed (Optional)</label>
+                <label className="text-sm font-semibold text-foreground block mb-1">Documents Needed (Optional)</label>
                 <input
                   type="text"
                   value={moreInfoDocs}
                   onChange={e => setMoreInfoDocs(e.target.value)}
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                  className="w-full p-2 border border-border rounded-lg text-sm"
                   placeholder="e.g. Updated Resume, Offer Letter"
                 />
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">Deadline (Optional)</label>
+                <label className="text-sm font-semibold text-foreground block mb-1">Deadline (Optional)</label>
                 <input
                   type="date"
                   value={moreInfoDeadline}
                   onChange={e => setMoreInfoDeadline(e.target.value)}
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                  className="w-full p-2 border border-border rounded-lg text-sm"
                 />
               </div>
               <button
@@ -764,19 +786,19 @@ export default function VerificationDashboard() {
       {/* Delete Application Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-card rounded-2xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden">
             <div className="flex items-center gap-3 p-4 border-b border-red-100 bg-red-50">
               <AlertCircle className="w-6 h-6 text-red-600" />
               <h3 className="font-bold text-red-900">Delete Application</h3>
             </div>
             <div className="p-6">
-              <p className="text-sm text-gray-700 mb-6">
+              <p className="text-sm text-foreground mb-6">
                 Are you sure you want to permanently delete this mentor application? This will reset the user's role and delete all application data. They can reapply later. This action cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 rounded-xl"
+                  className="flex-1 bg-muted hover:bg-gray-200 text-foreground font-semibold py-2.5 rounded-xl"
                 >
                   Cancel
                 </button>

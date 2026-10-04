@@ -1,37 +1,44 @@
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Star,
   MapPin,
-  ShieldCheck,
   Clock,
-  BriefcaseBusiness,
+  Briefcase,
   Calendar,
   MessageSquare,
   ArrowLeft,
   CheckCircle2,
-  Video,
   Globe,
   Users,
   GraduationCap,
   Award,
   ExternalLink,
   Code2,
-  MessageCircle,
-  Activity,
-  Zap,
+  Quote,
+  Building2,
+  Layers,
+  Target,
+  FileCheck2,
+  Headphones,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  HelpCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import BookSessionButton from "./BookSessionButton";
+import SendMessageButton from "./SendMessageButton";
+import { ShareProfileButton, SaveMentorButton } from "./MentorProfileActions";
+import { SessionAvailabilityCard } from "./SessionAvailabilityCard";
+import { ProfileTabs } from "./ProfileTabs";
+import { cn } from "@/lib/utils";
 
 export default async function MentorProfilePage({
   params,
@@ -42,23 +49,27 @@ export default async function MentorProfilePage({
 
   const mentor = await prisma.mentor.findUnique({
     where: { id },
-    include: { 
-      settings: true, 
-      skills: true, 
+    include: {
+      settings: true,
+      skills: true,
       sessionTypes: true,
+      weeklySchedules: true,
       experiences: {
-        orderBy: { duration: 'desc' }
+        orderBy: { duration: "desc" },
       },
       educations: true,
       socialProfiles: true,
+      user: {
+        select: { targetDomains: true, specializations: true, headline: true },
+      },
       reviews: {
         include: {
           user: {
-            select: { name: true, image: true }
-          }
+            select: { name: true, image: true },
+          },
         },
-        orderBy: { createdAt: 'desc' }
-      }
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -72,8 +83,8 @@ export default async function MentorProfilePage({
       profileCompleted: true,
       OR: [
         { industry: mentor.industry ?? undefined },
-        { company: mentor.company ?? undefined }
-      ]
+        { company: mentor.company ?? undefined },
+      ],
     },
     take: 3,
     select: {
@@ -86,485 +97,916 @@ export default async function MentorProfilePage({
       reviewsCount: true,
       price: true,
       experienceYears: true,
-      skills: { take: 3 }
-    }
+      skills: { take: 3 },
+    },
   });
 
   const session = await getServerSession(authOptions);
   const isAuthenticated = !!session?.user;
 
+  // Check if current user saved this mentor
+  let isSaved = false;
+  if (session?.user?.email) {
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+    if (user) {
+      const saved = await prisma.savedMentor.findUnique({
+        where: {
+          userId_mentorId: {
+            userId: user.id,
+            mentorId: id,
+          },
+        },
+      });
+      isSaved = !!saved;
+    }
+  }
+
   const skills = mentor.skills.map((s) => s.name);
-  const languages = mentor.languages ? mentor.languages.split(", ").filter(Boolean) : [];
+  const technicalSkills = mentor.skills.filter(
+    (s) => s.category !== "Areas of Mentorship"
+  );
+  const mentorshipTags =
+    mentor.skills
+      .filter((s) => s.category === "Areas of Mentorship")
+      .map((s) => s.name)
+      .slice(0, 5);
+
+  // If no areas of mentorship, use first few skills or session types
+  const displayTags =
+    mentorshipTags.length > 0
+      ? mentorshipTags
+      : mentor.skills.slice(0, 5).map((s) => s.name);
+
+  const languages = mentor.languages
+    ? mentor.languages.split(", ").filter(Boolean)
+    : ["English"];
+
   const sessionDuration = mentor.settings?.sessionDuration ?? 60;
   const isVerified = mentor.applicationStatus === "VERIFIED";
 
+  // Calculate real rating
+  const avgRating =
+    mentor.rating > 0
+      ? mentor.rating.toFixed(1)
+      : mentor.reviews.length > 0
+      ? (
+          mentor.reviews.reduce((acc, r) => acc + r.rating, 0) /
+          mentor.reviews.length
+        ).toFixed(1)
+      : "5.0";
+
+  // Mentees count: real calculation based on totalSessions
+  const menteesCount = Math.max(
+    Math.floor(mentor.totalSessions * 0.8),
+    mentor.totalSessions === 0 ? 0 : 1
+  );
+
+  // Quote / Headline for the banner card
+  const mentorQuote =
+    mentor.headline ||
+    mentor.user?.headline ||
+    mentor.highlights ||
+    "I believe in practical, honest and personalized guidance to help you grow in your career.";
+
+  // Intro snippet for hero
+  const bioSummary =
+    mentor.bio
+      ? mentor.bio.split("\n")[0].slice(0, 160) +
+        (mentor.bio.length > 160 ? "..." : "")
+      : `Helping individuals build successful careers in ${
+          mentor.industry || "technology"
+        } through practical guidance, real-world experience and interview preparation.`;
+
   return (
-    <div className="bg-muted/10 min-h-screen pb-24">
-      {/* Top Navigation */}
-      <div className="bg-background border-b sticky top-16 z-40">
-        <div className="container mx-auto px-4 h-14 flex items-center">
+    <div className="bg-slate-50/70 dark:bg-background min-h-screen pb-24 text-foreground">
+      {/* ─── Top Navigation Bar ────────────────────────────────────────────── */}
+      <div className="bg-background/95 backdrop-blur-md border-b border-border/70 sticky top-0 z-40 transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <Link
             href="/mentors"
-            className="flex items-center text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            className="flex items-center text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors group"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Mentors
+            <ArrowLeft className="h-4 w-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
+            Back to Mentors
           </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <ShareProfileButton mentorName={mentor.name} />
+            <SaveMentorButton
+              mentorId={mentor.id}
+              isInitiallySaved={isSaved}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Main Content */}
-          <div className="flex-1 space-y-8">
-            {/* Header Profile Card */}
-            <Card className="overflow-hidden border-none shadow-md">
-              <div className="h-32 bg-gradient-to-r from-primary/20 via-blue-500/20 to-secondary/20" />
-              <CardContent className="pt-0 relative px-6 sm:px-10 pb-10">
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <div className="-mt-16 relative">
-                    <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-                      <AvatarImage
-                        src={
-                          mentor.image ??
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(mentor.name)}&background=6366f1&color=fff&size=128`
-                        }
-                        alt={mentor.name}
-                      />
-                      <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    {isVerified && (
-                      <div
-                        className="absolute bottom-1 right-1 bg-background rounded-full p-0.5 shadow-sm"
-                        title="Verified Employee"
-                      >
-                        <ShieldCheck className="h-7 w-7 text-emerald-500" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="pt-2 sm:pt-4 flex-1">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-3 mb-1">
-                          <h1 className="text-3xl font-bold tracking-tight">
-                            {mentor.name}
-                          </h1>
-                          {mentor.profileCompleted && (
-                            <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-0 dark:bg-emerald-900/30 dark:text-emerald-300">
-                              Profile {mentor.completionScore}%
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-lg text-foreground/80 font-medium mb-3">
-                          {mentor.role} @{" "}
-                          <span className="text-foreground font-bold">
-                            {mentor.company}
-                          </span>
-                        </p>
-                        
-                        {/* New Metrics Grid */}
-                        <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground mt-4">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-4 w-4 text-primary" /> {mentor.location || "Remote"}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-4 w-4 text-primary" />{" "}
-                            {mentor.experienceYears} Years Exp.
-                          </div>
-                          <div className="flex items-center gap-1.5 font-medium">
-                            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                            <span className="text-foreground">{mentor.rating}</span> ({mentor.reviewsCount} Reviews)
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <GraduationCap className="h-4 w-4 text-primary" />
-                            Helped {Math.max(Math.floor(mentor.totalSessions * 0.8), mentor.totalSessions === 0 ? 0 : 1)} Professionals
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Video className="h-4 w-4 text-primary" />
-                            {mentor.totalSessions} Sessions Completed
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
-                            Replies within 2 hours
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Activity className="h-4 w-4 text-emerald-500" />
-                            <span className="text-emerald-600 font-medium">Active Today</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <Calendar className="h-4 w-4" />
-                            Mentor Since {mentor.createdAt.getFullYear()}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        {/* ─── HERO SECTION ─────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border/70 rounded-3xl shadow-xs overflow-hidden mb-6 relative">
+          {/* Banner with gradient & quote overlay */}
+          <div className="h-44 sm:h-52 md:h-60 w-full relative overflow-hidden bg-gradient-to-r from-blue-500/20 via-indigo-500/25 to-pink-500/20 dark:from-blue-950/60 dark:via-indigo-950/60 dark:to-purple-950/60">
+            {mentor.coverImage && (
+              <Image
+                src={mentor.coverImage}
+                alt={`${mentor.name} Cover`}
+                fill
+                priority
+                sizes="100vw"
+                className="object-cover opacity-60 dark:opacity-40"
+              />
+            )}
 
-            {/* Tabs Content */}
-            <Tabs defaultValue="about" className="w-full">
-              <TabsList className="w-full justify-start h-14 bg-transparent border-b rounded-none p-0">
-                <TabsTrigger
-                  value="about"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 h-full font-medium"
-                >
-                  About
-                </TabsTrigger>
-                <TabsTrigger
-                  value="reviews"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 h-full font-medium"
-                >
-                  Reviews ({mentor.reviewsCount})
-                </TabsTrigger>
-              </TabsList>
+            {/* Subtle decorative background lights */}
+            <div className="absolute inset-0 bg-radial from-transparent to-card/20 pointer-events-none" />
 
-              <TabsContent value="about" className="mt-8 space-y-10">
-                {/* About Section */}
-                <section>
-                  <h3 className="text-xl font-bold mb-4">About</h3>
-                  <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
-                    {mentor.bio ? (
-                      <p>{mentor.bio}</p>
-                    ) : (
-                      <p>
-                        I&apos;m a {mentor.role} at {mentor.company} with{" "}
-                        {mentor.experienceYears} years of experience in the{" "}
-                        {mentor.industry} industry. I&apos;m passionate about
-                        mentoring and helping professionals grow their careers.
-                      </p>
-                    )}
-                  </div>
-                </section>
-
-                <Separator />
-
-                {/* Expertise Section */}
-                {mentor.skills.length > 0 && (
-                  <>
-                    <section>
-                      <h3 className="text-xl font-bold mb-4">Expertise</h3>
-                      <div className="flex flex-wrap gap-2.5">
-                        {mentor.skills
-                          .filter(s => s.category !== "Areas of Mentorship")
-                          .map((skill) => (
-                            <Badge
-                              key={skill.id}
-                              variant="secondary"
-                              className="px-4 py-2 text-sm bg-muted/60 hover:bg-muted font-medium rounded-lg"
-                            >
-                              {skill.name}
-                            </Badge>
-                          ))}
-                      </div>
-                    </section>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Professional Information */}
-                <section>
-                  <h3 className="text-xl font-bold mb-4">Professional Information</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-muted/20 p-6 rounded-2xl border border-border/50">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Current Company</p>
-                      <p className="font-semibold text-foreground">{mentor.company || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Designation</p>
-                      <p className="font-semibold text-foreground">{mentor.role || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Industry</p>
-                      <p className="font-semibold text-foreground">{mentor.industry || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Experience</p>
-                      <p className="font-semibold text-foreground">{mentor.experienceYears ? `${mentor.experienceYears} Years` : "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Employment</p>
-                      <p className="font-semibold text-foreground">{mentor.employmentType || "Full Time"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Location</p>
-                      <p className="font-semibold text-foreground">{mentor.location || "-"}</p>
-                    </div>
-                    {mentor.noticePeriod && (
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Notice Period</p>
-                        <p className="font-semibold text-foreground">{mentor.noticePeriod}</p>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <Separator />
-
-                {/* Languages Section */}
-                {languages.length > 0 && (
-                  <>
-                    <section>
-                      <h3 className="text-xl font-bold mb-4">Languages</h3>
-                      <div className="flex flex-wrap gap-2.5">
-                        {languages.map((lang) => (
-                          <div key={lang} className="flex items-center gap-2 bg-muted/30 px-4 py-2 rounded-xl border border-border/50">
-                            <Globe className="w-4 h-4 text-primary" />
-                            <span className="font-medium text-sm">{lang}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Availability Section */}
-                {mentor.skills.filter(s => s.category === "Areas of Mentorship").length > 0 && (
-                  <>
-                    <section>
-                      <h3 className="text-xl font-bold mb-4">What I can help with</h3>
-                      <div className="grid sm:grid-cols-2 gap-y-3 gap-x-6">
-                        {mentor.skills
-                          .filter(s => s.category === "Areas of Mentorship")
-                          .map((skill) => (
-                            <div key={skill.id} className="flex items-start gap-2.5">
-                              <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
-                              <span className="text-foreground font-medium">{skill.name}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </section>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Work Experience */}
-                {mentor.experiences && mentor.experiences.length > 0 && (
-                  <>
-                    <section>
-                      <h3 className="text-xl font-bold mb-6">Work Experience</h3>
-                      <div className="space-y-6">
-                        {mentor.experiences.map((exp) => (
-                          <div key={exp.id} className="relative pl-6 border-l-2 border-muted">
-                            <div className="absolute w-3 h-3 bg-primary rounded-full -left-[7px] top-1.5 ring-4 ring-background" />
-                            <h4 className="text-lg font-bold text-foreground">{exp.designation}</h4>
-                            <p className="text-primary font-medium mb-1">{exp.companyName}</p>
-                            <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                              <Calendar className="w-3.5 h-3.5" /> {exp.duration}
-                            </p>
-                            {exp.responsibilities && (
-                              <p className="text-muted-foreground text-sm leading-relaxed mt-2">{exp.responsibilities}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Education */}
-                {mentor.educations && mentor.educations.length > 0 && (
-                  <>
-                    <section>
-                      <h3 className="text-xl font-bold mb-6">Education</h3>
-                      <div className="space-y-6">
-                        {mentor.educations.map((edu) => (
-                          <div key={edu.id} className="flex gap-4 items-start">
-                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                              <GraduationCap className="w-6 h-6 text-primary" />
-                            </div>
-                            <div>
-                              <h4 className="text-lg font-bold text-foreground">{edu.degree}</h4>
-                              <p className="text-muted-foreground font-medium mb-1">{edu.college}</p>
-                              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                                <Calendar className="w-3.5 h-3.5" /> Graduated {edu.passingYear}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Statistics Block */}
-                <section>
-                  <h3 className="text-xl font-bold mb-4">Professional Statistics</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-primary/5 p-5 rounded-2xl border border-primary/10 text-center">
-                      <p className="text-3xl font-bold text-primary mb-1">{mentor.totalSessions}</p>
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Sessions</p>
-                    </div>
-                    <div className="bg-emerald-500/5 p-5 rounded-2xl border border-emerald-500/10 text-center dark:bg-emerald-900/10 dark:border-emerald-900/20">
-                      <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-1">
-                        {Math.max(Math.floor(mentor.totalSessions * 0.8), mentor.totalSessions === 0 ? 0 : 1)}
-                      </p>
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Mentees</p>
-                    </div>
-                    <div className="bg-amber-500/5 p-5 rounded-2xl border border-amber-500/10 text-center dark:bg-amber-900/10 dark:border-amber-900/20">
-                      <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mb-1">{mentor.rating}</p>
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Avg Rating</p>
-                    </div>
-                    <div className="bg-blue-500/5 p-5 rounded-2xl border border-blue-500/10 text-center dark:bg-blue-900/10 dark:border-blue-900/20">
-                      <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">{mentor.reviewsCount}</p>
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Reviews</p>
-                    </div>
-                  </div>
-                </section>
-              </TabsContent>
-
-              <TabsContent value="reviews" className="mt-8 space-y-6">
-                {mentor.reviews && mentor.reviews.length > 0 ? (
-                  <div className="space-y-6">
-                    {mentor.reviews.map((review) => (
-                      <div key={review.id} className="bg-background rounded-2xl p-6 border border-border shadow-sm">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={review.user?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(review.user?.name || "User")}`} />
-                              <AvatarFallback>{(review.user?.name || "U").charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-semibold text-foreground text-sm">{review.user?.name || "Anonymous User"}</p>
-                              <p className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 px-2.5 py-1 rounded-full text-xs font-bold">
-                            <Star className="h-3.5 w-3.5 fill-amber-500" />
-                            {review.rating}
-                          </div>
-                        </div>
-                        <p className="text-muted-foreground text-sm leading-relaxed">{review.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 bg-muted/20 rounded-3xl border border-dashed border-border/60">
-                    <Star className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                    <h3 className="text-lg font-bold mb-1">No reviews yet</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Be the first to book a session and leave a review.
+            {/* Top-right Testimonial / Quote Card */}
+            <div className="absolute top-4 right-4 sm:top-6 sm:right-6 max-w-sm sm:max-w-md hidden md:block z-10">
+              <div className="bg-white/90 dark:bg-card/90 backdrop-blur-md border border-white/80 dark:border-border/80 rounded-2xl p-4 sm:p-5 shadow-sm">
+                <div className="flex gap-3 items-start">
+                  <Quote className="w-5 h-5 text-blue-500 shrink-0 fill-blue-500/15 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-foreground/85 font-medium italic leading-relaxed line-clamp-3">
+                      &ldquo;{mentorQuote}&rdquo;
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-2 font-semibold">
+                      — {mentor.name}
                     </p>
                   </div>
-                )}
-              </TabsContent>
-            </Tabs>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Sidebar Services List */}
-          <div className="w-full lg:w-[380px] space-y-4">
-            <h2 className="text-xl font-bold mb-4">Services Offered</h2>
-            
-            {mentor.sessionTypes.map(service => (
-              <Card key={service.id} className="border border-border shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-bold text-base text-foreground mb-1">{service.title}</h3>
-                      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground mt-2">
-                        <div className="flex items-center gap-2">
-                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-primary"/> {service.duration} mins</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1"><Video className="w-3.5 h-3.5 text-primary"/> 1:1 Video</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          <span className="text-emerald-700 dark:text-emerald-400 font-medium">Free cancellation up to 24 hours</span>
-                        </div>
+          {/* Hero Profile Body */}
+          <div className="px-6 sm:px-8 pb-8 pt-0 relative">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+              {/* Left Identity Column */}
+              <div className="flex flex-col sm:flex-row gap-5 items-start flex-1 min-w-0">
+                {/* Avatar & Availability Badge */}
+                <div className="-mt-14 sm:-mt-16 relative shrink-0 flex flex-col items-center">
+                  <Avatar className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl sm:rounded-full border-4 border-background shadow-md overflow-hidden bg-background">
+                    <AvatarImage
+                      src={
+                        mentor.image ??
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                          mentor.name
+                        )}&background=6366f1&color=fff&size=160`
+                      }
+                      alt={mentor.name}
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="text-2xl font-bold bg-blue-100 text-blue-600">
+                      {mentor.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  {/* Available Badge */}
+                  <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-xs font-semibold shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Available
+                  </div>
+                </div>
+
+                {/* Identity Information */}
+                <div className="pt-2 sm:pt-3 flex-1 min-w-0">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                      {mentor.name}
+                    </h1>
+                    {isVerified && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Verified Mentor
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-sm sm:text-base font-semibold text-foreground/90 mt-1">
+                    {mentor.role || "Mentor"}{" "}
+                    <span className="text-muted-foreground font-normal">@</span>{" "}
+                    {mentor.company || "Independent"}
+                  </p>
+
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed">
+                    {bioSummary}
+                  </p>
+
+                  {/* Metadata Pills */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3.5 text-xs text-muted-foreground">
+                    {mentor.experienceYears && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
+                        <Briefcase className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{mentor.experienceYears} years exp</span>
                       </div>
+                    )}
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      <span>{mentor.location || "Remote"}</span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-foreground">₹{service.price.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <BookSessionButton mentorId={mentor.id} serviceId={service.id} isAuthenticated={isAuthenticated} />
-                </CardContent>
-              </Card>
-            ))}
-
-            {mentor.sessionTypes.length === 0 && (
-              <div className="text-center p-6 bg-muted/30 rounded-2xl border border-dashed">
-                <p className="text-muted-foreground text-sm">No services listed yet.</p>
-              </div>
-            )}
-
-            {/* Social Links */}
-            {mentor.socialProfiles && (
-              <Card className="border border-border shadow-sm rounded-2xl overflow-hidden">
-                <CardContent className="p-5">
-                  <h3 className="font-bold text-base mb-4">Connect</h3>
-                  <div className="flex gap-3">
-                    {mentor.socialProfiles.linkedin && (
-                      <Link href={mentor.socialProfiles.linkedin} target="_blank" className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center hover:bg-blue-500/20 transition-colors">
-                        <ExternalLink className="w-5 h-5" />
-                      </Link>
+                    {mentor.company && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>{mentor.company}</span>
+                      </div>
                     )}
-                    {mentor.socialProfiles.github && (
-                      <Link href={mentor.socialProfiles.github} target="_blank" className="w-10 h-10 rounded-full bg-foreground/5 text-foreground flex items-center justify-center hover:bg-foreground/10 transition-colors">
-                        <Code2 className="w-5 h-5" />
-                      </Link>
-                    )}
-                    {mentor.socialProfiles.twitter && (
-                      <Link href={mentor.socialProfiles.twitter} target="_blank" className="w-10 h-10 rounded-full bg-sky-500/10 text-sky-600 flex items-center justify-center hover:bg-sky-500/20 transition-colors">
-                        <MessageCircle className="w-5 h-5" />
-                      </Link>
-                    )}
-                    {mentor.socialProfiles.portfolio && (
-                      <Link href={mentor.socialProfiles.portfolio} target="_blank" className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors">
-                        <Globe className="w-5 h-5" />
-                      </Link>
+                    {mentor.industry && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
+                        <Layers className="w-3.5 h-3.5 text-sky-500" />
+                        <span>{mentor.industry}</span>
+                      </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-            
-            <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-muted/20">
-              <CardContent className="p-5">
-                <Link
-                  href="/dashboard"
-                  className={cn(
-                    buttonVariants({ size: "lg", variant: "outline" }),
-                    "w-full h-12 text-sm bg-background"
+
+                  {/* Skill/Service Tags */}
+                  {displayTags.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-border/40">
+                      {displayTags.map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/50 text-xs font-medium"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   )}
-                >
-                  Send a Message
-                </Link>
-              </CardContent>
-            </Card>
+                </div>
+              </div>
+
+              {/* Right Side: Hero Stats & Actions */}
+              <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 lg:self-center">
+                {/* 4 Stats Grid */}
+                <div className="grid grid-cols-4 gap-2 p-3 sm:p-4 rounded-2xl bg-muted/30 border border-border/60">
+                  <div className="text-center">
+                    <p className="text-lg sm:text-xl font-bold text-foreground">
+                      {mentor.totalSessions}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">
+                      Sessions
+                    </p>
+                  </div>
+                  <div className="text-center border-l border-border/40">
+                    <p className="text-lg sm:text-xl font-bold text-foreground">
+                      {menteesCount}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">
+                      Mentees
+                    </p>
+                  </div>
+                  <div className="text-center border-l border-border/40">
+                    <p className="text-lg sm:text-xl font-bold text-amber-500 flex items-center justify-center gap-0.5">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      {avgRating}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">
+                      Avg Rating
+                    </p>
+                  </div>
+                  <div className="text-center border-l border-border/40">
+                    <p className="text-lg sm:text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {mentor.responseRate ?? 100}%
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">
+                      Response
+                    </p>
+                  </div>
+                </div>
+
+                {/* Primary Actions */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2.5">
+                  <SendMessageButton
+                    mentorUserId={mentor.userId}
+                    isAuthenticated={isAuthenticated}
+                    className="w-full h-11 text-xs sm:text-sm font-semibold border-border hover:bg-muted text-foreground"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-1.5 text-blue-600" />
+                    Send a Message
+                  </SendMessageButton>
+
+                  <BookSessionButton
+                    mentorId={mentor.id}
+                    isAuthenticated={isAuthenticated}
+                    className="w-full h-11 text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                  >
+                    <Calendar className="w-4 h-4 mr-1.5" />
+                    Book a Session
+                  </BookSessionButton>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Related Mentors */}
-        {relatedMentors.length > 0 && (
-          <div className="mt-16">
-            <h2 className="text-2xl font-bold mb-8">Related Mentors</h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {relatedMentors.map((rm) => (
-                <Link key={rm.id} href={`/mentors/${rm.id}`} className="group block">
-                  <Card className="h-full border border-border hover:border-primary/50 hover:shadow-md transition-all">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <Avatar className="h-14 w-14 border-2 border-background shadow-sm group-hover:scale-105 transition-transform">
-                          <AvatarImage src={rm.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(rm.name)}&background=6366f1&color=fff`} />
-                          <AvatarFallback>{rm.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
+        {/* ─── Profile Navigation Tabs ──────────────────────────────────────── */}
+        <ProfileTabs reviewsCount={mentor.reviewsCount} />
+
+        {/* ─── MAIN CONTENT 3-COLUMN DESKTOP GRID ───────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* ════ LEFT COLUMN (About, Professional Info, Experience) ════════ */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* About Card */}
+            <div
+              id="about-section"
+              className="bg-card border border-border/70 rounded-2xl p-6 shadow-xs"
+            >
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Target className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-base text-foreground">About</h3>
+              </div>
+
+              <div className="text-muted-foreground text-xs sm:text-sm leading-relaxed whitespace-pre-line mb-6">
+                {mentor.bio ? (
+                  <p>{mentor.bio}</p>
+                ) : (
+                  <p>
+                    I&apos;m a {mentor.role} at {mentor.company} with{" "}
+                    {mentor.experienceYears || 2} years of professional
+                    experience in the {mentor.industry || "Technology"}{" "}
+                    industry. I focus on practical, real-world guidance that
+                    helps you grow with clarity and confidence.
+                  </p>
+                )}
+              </div>
+
+              {/* 4 Feature Value Highlights */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-border/60">
+                <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+                    <Target className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      Personalized Guidance
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Tailored to your goals
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      Real Industry Experience
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Insights from day-to-day work
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                    <FileCheck2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      Practical Approach
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Actionable and honest advice
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60 flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0 mt-0.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      Ongoing Support
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Even beyond a single session
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Professional Information Card */}
+            <div className="bg-card border border-border/70 rounded-2xl p-6 shadow-xs">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Professional Information
+                  </h3>
+                </div>
+
+                {mentor.company && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60 text-xs font-semibold text-foreground">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{mentor.company}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4">
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Current Company
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.company || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Designation
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.role || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Industry
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.industry || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Experience
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.experienceYears
+                      ? `${mentor.experienceYears} years`
+                      : "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Current Location
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.location || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Work Type
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.employmentType || "Full Time"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Education
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {mentor.educations?.[0]?.degree || "-"}
+                  </p>
+                </div>
+
+                <div className="col-span-2">
+                  <p className="text-[11px] text-muted-foreground mb-1">
+                    Languages
+                  </p>
+                  <p className="font-semibold text-xs sm:text-sm text-foreground">
+                    {languages.join(", ") || "English"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Work Experience Card */}
+            {mentor.experiences && mentor.experiences.length > 0 && (
+              <div
+                id="experience-section"
+                className="bg-card border border-border/70 rounded-2xl p-6 shadow-xs"
+              >
+                <div className="flex items-center gap-2.5 mb-6">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Work Experience
+                  </h3>
+                </div>
+
+                <div className="space-y-6 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border/60">
+                  {mentor.experiences.map((exp, idx) => (
+                    <div key={exp.id || idx} className="relative pl-9">
+                      {/* Timeline dot */}
+                      <div className="absolute left-2 top-1.5 w-3.5 h-3.5 rounded-full bg-blue-600 border-4 border-background ring-2 ring-blue-100 dark:ring-blue-900/50" />
+
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
                         <div>
-                          <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">{rm.name}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-1">{rm.role} @ {rm.company}</p>
-                          <div className="flex items-center gap-3 mt-2 text-xs font-medium">
-                            <span className="flex items-center gap-1 text-amber-500">
-                              <Star className="w-3.5 h-3.5 fill-amber-500" /> {rm.rating}
+                          <h4 className="text-sm font-bold text-foreground">
+                            {exp.designation}
+                          </h4>
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-0.5">
+                            {exp.companyName}{" "}
+                            <span className="text-muted-foreground font-normal">
+                              • Full Time
                             </span>
-                            <span className="text-muted-foreground">₹{rm.price.toLocaleString()}/session</span>
-                          </div>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {exp.duration}
+                          </span>
+                          {exp.duration?.toLowerCase().includes("present") && (
+                            <Badge className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] px-2 py-0">
+                              Current
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      {exp.responsibilities && (
+                        <div className="text-xs text-muted-foreground mt-2.5 leading-relaxed space-y-1">
+                          {exp.responsibilities
+                            .split("\n")
+                            .filter(Boolean)
+                            .map((line, lIdx) => (
+                              <p key={lIdx} className="flex items-start gap-1.5">
+                                <span className="text-blue-500 font-bold">•</span>
+                                <span>{line.replace(/^[•\-\*]\s*/, "")}</span>
+                              </p>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ════ CENTER COLUMN (Availability, Top Skills, Education) ══════ */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Session Availability Card */}
+            <SessionAvailabilityCard
+              mentorId={mentor.id}
+              weeklySchedules={mentor.weeklySchedules}
+              sessionDuration={sessionDuration}
+            />
+
+            {/* Top Skills Card */}
+            {skills.length > 0 && (
+              <div className="bg-card border border-border/70 rounded-2xl p-6 shadow-xs">
+                <div className="flex items-center gap-2.5 mb-5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <Code2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Top Skills
+                  </h3>
+                </div>
+
+                <div className="space-y-3.5">
+                  {skills.slice(0, 7).map((skill, idx) => {
+                    const colorThemes = [
+                      "bg-blue-500",
+                      "bg-teal-500",
+                      "bg-indigo-500",
+                      "bg-amber-500",
+                      "bg-rose-500",
+                      "bg-purple-500",
+                      "bg-emerald-500",
+                    ];
+                    const barColor = colorThemes[idx % colorThemes.length];
+
+                    return (
+                      <div key={idx} className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-medium text-foreground">
+                            {skill}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground font-semibold">
+                            Proficient
+                          </span>
+                        </div>
+                        <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
+                          <div
+                            className={cn("h-full rounded-full transition-all", barColor)}
+                            style={{
+                              width: `${Math.max(65, 92 - idx * 5)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Education Card */}
+            {mentor.educations && mentor.educations.length > 0 && (
+              <div
+                id="education-section"
+                className="bg-card border border-border/70 rounded-2xl p-6 shadow-xs"
+              >
+                <div className="flex items-center gap-2.5 mb-5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Education
+                  </h3>
+                </div>
+
+                <div className="space-y-4">
+                  {mentor.educations.map((edu, idx) => (
+                    <div
+                      key={edu.id || idx}
+                      className="flex items-start gap-3.5 p-3.5 rounded-xl bg-muted/20 border border-border/60"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/50 text-sm">
+                        {edu.degree?.charAt(0).toUpperCase() || "E"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-xs sm:text-sm font-bold text-foreground">
+                            {edu.degree}
+                          </h4>
+                          <span className="text-[11px] text-muted-foreground font-semibold shrink-0">
+                            {edu.passingYear}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {edu.college}
+                        </p>
+                        {edu.branch && (
+                          <p className="text-[11px] text-muted-foreground/80 mt-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-muted-foreground" />
+                            {edu.branch},{" "}
+                            {mentor.location || "Hyderabad, India"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ════ RIGHT COLUMN / SIDEBAR (Services, Reviews) ══════════════ */}
+          <div className="lg:col-span-3 space-y-5">
+            {/* Services List */}
+            <div id="services-section" className="space-y-4">
+              {mentor.sessionTypes.map((service) => (
+                <div
+                  key={service.id}
+                  className="bg-card border border-border/70 rounded-2xl p-5 shadow-xs hover:border-blue-500/40 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                        <Layers className="w-3.5 h-3.5" />
+                      </div>
+                      <h4 className="font-bold text-sm text-foreground">
+                        {service.title}
+                      </h4>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-base font-extrabold text-foreground">
+                        ₹{service.price.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-2.5">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Clock className="w-3 h-3 text-blue-500" />
+                      {service.duration} mins
+                    </span>
+                    <span>•</span>
+                    <span>1:1 Session</span>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+                    Get personalized guidance, clarity on career paths, skills and
+                    industry opportunities.
+                  </p>
+
+                  <BookSessionButton
+                    mentorId={mentor.id}
+                    serviceId={service.id}
+                    isAuthenticated={isAuthenticated}
+                    className="w-full h-10 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Book Session
+                  </BookSessionButton>
+                </div>
+              ))}
+
+              {mentor.sessionTypes.length === 0 && (
+                <div className="bg-card border border-border/70 rounded-2xl p-6 text-center shadow-xs">
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Book a personalized 1:1 mentorship session.
+                  </p>
+                  <BookSessionButton
+                    mentorId={mentor.id}
+                    isAuthenticated={isAuthenticated}
+                    className="w-full h-10 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Book Session
+                  </BookSessionButton>
+                </div>
+              )}
+            </div>
+
+            {/* Mentees Say / Reviews Card */}
+            <div
+              id="reviews-section"
+              className="bg-card border border-border/70 rounded-2xl p-5 shadow-xs"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-500">
+                    <Star className="w-3.5 h-3.5 fill-amber-400" />
+                  </div>
+                  <h4 className="font-bold text-sm text-foreground">
+                    Mentees say
+                  </h4>
+                </div>
+
+                <Link
+                  href={`#reviews-section`}
+                  className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                >
+                  View all reviews →
+                </Link>
+              </div>
+
+              {/* Review summary rating */}
+              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-3 pb-3 border-b border-border/60">
+                <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                <span>
+                  {avgRating}/5 ({mentor.reviewsCount}{" "}
+                  {mentor.reviewsCount === 1 ? "review" : "reviews"})
+                </span>
+              </div>
+
+              {mentor.reviews && mentor.reviews.length > 0 ? (
+                <div className="space-y-4">
+                  {mentor.reviews.slice(0, 3).map((review) => (
+                    <div
+                      key={review.id}
+                      className="p-3.5 rounded-xl bg-muted/20 border border-border/60 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-6 h-6 text-xs">
+                            <AvatarImage src={review.user?.image || undefined} />
+                            <AvatarFallback className="text-[10px] bg-blue-100 text-blue-700 font-bold">
+                              {(review.user?.name || "U").charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-semibold text-foreground">
+                            {review.user?.name || "Mentee"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "w-3 h-3",
+                                s <= review.rating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-muted-foreground/30"
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 italic">
+                        &ldquo;{review.comment}&rdquo;
+                      </p>
+
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString("en-IN", {
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-muted-foreground">
+                  <Star className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+                  No reviews yet. Be the first to book a session and leave a review.
+                </div>
+              )}
+            </div>
+
+            {/* Social Connect Card if profiles exist */}
+            {mentor.socialProfiles && (
+              <div className="bg-card border border-border/70 rounded-2xl p-5 shadow-xs">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                  Connect with {mentor.name}
+                </h4>
+                <div className="flex gap-2">
+                  {mentor.socialProfiles.linkedin && (
+                    <Link
+                      href={mentor.socialProfiles.linkedin}
+                      target="_blank"
+                      className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                      title="LinkedIn"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+                  {mentor.socialProfiles.github && (
+                    <Link
+                      href={mentor.socialProfiles.github}
+                      target="_blank"
+                      className="w-8 h-8 rounded-lg bg-muted text-foreground flex items-center justify-center hover:bg-muted/80 transition-colors"
+                      title="GitHub"
+                    >
+                      <Code2 className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+                  {mentor.socialProfiles.portfolio && (
+                    <Link
+                      href={mentor.socialProfiles.portfolio}
+                      target="_blank"
+                      className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center hover:bg-indigo-100 transition-colors"
+                      title="Portfolio"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ─── Related Mentors Section ──────────────────────────────────────── */}
+        {relatedMentors.length > 0 && (
+          <div className="mt-16 pt-8 border-t border-border/70">
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-6 text-foreground">
+              Similar Mentors You Might Like
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {relatedMentors.map((rm) => (
+                <Link
+                  key={rm.id}
+                  href={`/mentors/${rm.id}`}
+                  className="group block"
+                >
+                  <div className="h-full bg-card border border-border/70 rounded-2xl p-5 hover:border-blue-500/50 hover:shadow-sm transition-all flex items-start gap-4">
+                    <Avatar className="h-12 w-12 border-2 border-background shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <AvatarImage
+                        src={
+                          rm.image ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                            rm.name
+                          )}&background=6366f1&color=fff`
+                        }
+                      />
+                      <AvatarFallback>{rm.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-sm text-foreground group-hover:text-blue-600 transition-colors truncate">
+                        {rm.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {rm.role} @ {rm.company}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2 text-xs font-semibold">
+                        <span className="flex items-center gap-1 text-amber-500">
+                          <Star className="w-3.5 h-3.5 fill-amber-400" />{" "}
+                          {rm.rating > 0 ? rm.rating.toFixed(1) : "5.0"}
+                        </span>
+                        <span className="text-foreground">
+                          ₹{rm.price.toLocaleString()}/session
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </Link>
               ))}
             </div>

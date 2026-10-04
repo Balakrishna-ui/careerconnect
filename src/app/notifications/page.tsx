@@ -22,7 +22,7 @@ type Notification = {
 };
 
 export default function NotificationsPage() {
-  const { data: notifications, mutate, isLoading } = useSWR<Notification[]>("/api/notifications", fetcher, { refreshInterval: 5000 });
+  const { data: notifications, mutate, isLoading } = useSWR<Notification[]>("/api/notifications", fetcher, { refreshInterval: 60000 });
 
   const markAsRead = async (id: string) => {
     await fetch("/api/notifications", {

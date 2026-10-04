@@ -41,13 +41,11 @@ export function ReviewSessionDialog({ bookingId, mentorName }: { bookingId: stri
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <div className="w-full">
-          <Button variant="default" className="w-full">
-            <Star className="w-4 h-4 mr-2" /> Leave a Review
-          </Button>
-        </div>
-      </DialogTrigger>
+      <DialogTrigger render={
+        <Button variant="default" className="w-full">
+          <Star className="w-4 h-4 mr-2" /> Leave a Review
+        </Button>
+      } />
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

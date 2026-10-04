@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { pusherServer } from "@/lib/pusher";
 
 // POST /api/admin/reviews — Admin reviews a mentor application
 export async function POST(request: NextRequest) {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
         newStatus = "MORE_INFO_REQUIRED";
         break;
       case "REOPEN":
-        newStatus = "UNDER_REVIEW";
+        newStatus = "PENDING";
         break;
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -59,7 +60,6 @@ export async function POST(request: NextRequest) {
       where: { id: mentorId },
       data: { 
         applicationStatus: newStatus,
-        ...(newStatus === "VERIFIED" ? { profileCompleted: true } : {})
       },
     });
 
@@ -95,15 +95,71 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Notify users
+    try {
+      await pusherServer.trigger("admin-channel", "mentor-status-changed", {
+        mentorId,
+        status: newStatus
+      });
+
+      if (newStatus === "VERIFIED") {
+        await pusherServer.trigger("public-mentors", "mentor-verified", {
+          mentorId
+        });
+        
+        await prisma.notification.create({
+          data: {
+            userId: mentor.userId,
+            type: "SYSTEM",
+            message: "Your mentor application has been approved.",
+            isRead: false
+          }
+        });
+      } else if (newStatus === "REJECTED") {
+        await prisma.notification.create({
+          data: {
+            userId: mentor.userId,
+            type: "SYSTEM",
+            message: "Your mentor application requires attention. Reason: " + (reason || ""),
+            isRead: false
+          }
+        });
+      }
+    } catch (pushErr) {
+      console.error("Pusher error:", pushErr);
+    }
+
     // Send email notifications
     if (mentor.user?.email) {
       const email = mentor.user.email;
+      const mentorName = mentor.name;
+      
       try {
-        if (action === "REJECT") {
+        if (newStatus === "VERIFIED") {
+          await sendEmail({
+            to: email,
+            subject: "Welcome to CareerConnect as a Mentor!",
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Congratulations ${mentorName}!</h2>
+                <p>Your mentor application has been approved. You are now officially a verified mentor on CareerConnect.</p>
+                <p>You can now start setting your availability, managing sessions, and helping job seekers advance their careers.</p>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL}/mentor/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px;">Go to Dashboard</a>
+              </div>
+            `,
+          });
+        } else if (newStatus === "REJECTED") {
           await sendEmail({
             to: email,
             subject: "Update on your Mentor Application",
-            html: `<p>Your mentor application has been rejected.</p><p><strong>Reason:</strong><br/>${reason}</p><p>You may update your information and reapply later.</p>`
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Hi ${mentorName},</h2>
+                <p>We've reviewed your mentor application. Unfortunately, it has been rejected at this time.</p>
+                ${reason ? `<p><strong>Reason provided:</strong> ${reason}</p>` : ''}
+                <p>You can log in to view more details and update your application if applicable.</p>
+              </div>
+            `,
           });
         } else if (action === "REOPEN") {
           await sendEmail({

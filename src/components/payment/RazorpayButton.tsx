@@ -29,6 +29,32 @@ export function RazorpayButton({ amount, type, metadata, buttonText, className, 
     try {
       setLoading(true);
 
+      const isTestMode = true; // process.env.NEXT_PUBLIC_PAYMENT_MODE === "test" || !process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
+      if (isTestMode) {
+        // Bypass Razorpay completely
+        const verifyRes = await fetch("/api/payment/verify-test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            test_order_id: `test_order_${Date.now()}`,
+            metadata,
+            type,
+          }),
+        });
+
+        if (verifyRes.ok) {
+          if (type === "PREMIUM_UNLOCK") {
+            await update({ premium: true });
+          }
+          if (onSuccess) onSuccess();
+        } else {
+          const verifyData = await verifyRes.json();
+          alert("Test Payment verification failed: " + verifyData.error);
+        }
+        return;
+      }
+
       // Load Razorpay Script
       const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
       if (!res) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { BadgeCheck, MapPin, Phone, Mail, Clock, Loader2 } from "lucide-react";
+import { BadgeCheck, MapPin, Phone, Mail, Clock, Loader2, Pencil } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useMentorProfile } from "@/contexts/MentorProfileContext";
@@ -21,12 +21,24 @@ export function ProfileHeader() {
   const hasPendingChanges = Object.keys(pendingChanges).length > 0;
 
   return (
-    <Card className="shadow-sm border-border overflow-hidden bg-gradient-to-r from-blue-50/50 to-transparent">
-      <CardContent className="p-6">
+    <Card className="shadow-sm border-border overflow-hidden">
+      {/* Cover Photo Banner */}
+      <div className="h-[180px] md:h-[220px] lg:h-[250px] w-full relative overflow-hidden bg-[linear-gradient(135deg,#dbeafe,#eef2ff)]">
+        {mentor?.coverImage && (
+          <Image 
+            src={mentor.coverImage} 
+            alt="Cover Photo" 
+            fill 
+            className="object-cover"
+          />
+        )}
+      </div>
+
+      <CardContent className="pt-0 p-6 relative">
         <div className="flex flex-col md:flex-row gap-6 items-start">
           
           {/* Left: Avatar & Progress Ring */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 -mt-16 relative z-10">
             <div className="w-32 h-32 rounded-full bg-muted border-4 border-background shadow-sm overflow-hidden flex items-center justify-center relative">
               {mentor?.image || mentor?.user?.image ? (
                 <Image src={mentor?.image || mentor?.user?.image} alt={mentor?.user?.name || "Profile"} fill className="object-cover" />
@@ -98,7 +110,13 @@ export function ProfileHeader() {
           <div className="w-full lg:w-72 flex flex-col gap-4">
             
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
+              <Link href="/mentor/profile/edit">
+                <button className="w-full py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm flex items-center justify-center gap-2 border-2 border-blue-600 text-blue-600 hover:bg-blue-50">
+                  <Pencil className="w-4 h-4" />
+                  Edit Profile
+                </button>
+              </Link>
               <button 
                 onClick={async () => {
                   await globalSave();

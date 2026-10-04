@@ -1,12 +1,23 @@
-export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus =
+  | 'AWAITING_PAYMENT'
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'COMPLETED'
+  | 'MISSED'
+  | 'EXPIRED';
 
 // Define valid transitions from each state
 const VALID_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
-  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-  CONFIRMED: ['COMPLETED', 'CANCELLED'],
+  AWAITING_PAYMENT: ['PENDING', 'CONFIRMED', 'CANCELLED', 'EXPIRED'],
+  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED', 'EXPIRED'],
+  CONFIRMED: ['COMPLETED', 'CANCELLED', 'MISSED'],
   REJECTED: [],
   CANCELLED: [],
   COMPLETED: [],
+  MISSED: [],
+  EXPIRED: [],
 };
 
 export class BookingStateMachine {
